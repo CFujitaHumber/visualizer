@@ -1,0 +1,43 @@
+# Runs lint, typecheck and the jest unit suite on the dev branch, plus a
+# non-blocking selenium smoke job (headless Chrome ships on ubuntu runners).
+#
+# Note: no bun.lock is committed yet (bun install cannot write it on the
+# maintainer's Windows machine — oven-sh/bun#10169), so installs are unfrozen.
+# The unpublished react-isometric-engine / isometric-physics packages resolve
+# from tarballs vendored under vendor/.
+name: Test
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      # jest runs under Node (never `bun test`)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    # Headless-browser smoke tests are flaky by nature — informative, not required.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install
+      - run: bun run test:e2e

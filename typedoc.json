@@ -1,0 +1,12 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "@humber-asv/visualizer",
+  "entryPoints": ["src/index.ts", "src/store/index.ts", "src/theme/index.ts"],
+  "out": "docs",
+  "tsconfig": "tsconfig.build.json",
+  "plugin": ["typedoc-material-theme"],
+  "themeColor": "#00c9ff",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "includeVersion": true
+}

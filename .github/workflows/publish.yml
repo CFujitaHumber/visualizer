@@ -1,0 +1,53 @@
+# Publishes @humber-asv/visualizer to npm on pushes to the `public` branch.
+#
+# Release flow: dev → master → bump `version` in package.json → merge to public.
+# The version guard makes re-runs and non-release pushes no-ops.
+#
+# Prerequisites (one-time):
+#   - npm org `humber-asv` exists and this repo's owner can publish to it
+#   - repo secret NPM_TOKEN: an npm granular automation token with publish rights
+#   - react-isometric-engine / isometric-physics published to npm (consumers
+#     cannot install this package until its peers are resolvable)
+name: Publish to npm
+
+on:
+  push:
+    branches: [public]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+      - run: bun install
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run build
+
+      - name: Check whether this version is already published
+        id: check
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "@humber-asv/visualizer@$VERSION" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::@humber-asv/visualizer@$VERSION already on npm — skipping publish"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.check.outputs.published == 'false'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
