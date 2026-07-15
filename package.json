@@ -39,9 +39,6 @@
     "docs": "typedoc",
     "prepublishOnly": "bun run build"
   },
-  "overrides": {
-    "isometric-physics": "file:./vendor/isometric-physics-1.0.2.tgz"
-  },
   "peerDependencies": {
     "@emotion/react": "^11.0.0",
     "@emotion/styled": "^11.0.0",
