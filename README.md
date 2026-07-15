@@ -55,32 +55,6 @@ export function App() {
 | `visualizer-components/store` | Redux store, typed hooks, all slice actions/selectors, connection thunks |
 | `visualizer-components/theme` | `lightTheme`, `telemetryTheme`, `statusColors`, `setColors` (+ MUI palette augmentations) |
 
-## Development
-
-This repo uses **Bun** for development and publishes to npm.
-
-```sh
-bun install         # install (engine packages resolve via link: to sibling repos)
-bun run dev         # demo harness at http://localhost:3000
-bun run typecheck   # tsc --noEmit
-bun run lint        # eslint
-bun run test        # jest unit tests (runs jest under Node — do not use `bun test`)
-bun run test:e2e    # selenium-webdriver smoke tests against the demo server
-bun run build       # emit ESM + d.ts to dist/
-bun run docs        # typedoc → docs/
-```
-
-The unpublished `react-isometric-engine` / `isometric-physics` packages are
-resolved from sibling checkouts (`../Github/…`) via `link:` devDependencies.
-They must be published to npm before this package can be published.
-
-### Branches / CI
-
-- `dev` — active development; push/PR runs lint + typecheck + jest (+ selenium job).
-- `master` — stable integration.
-- `public` — release branch; pushing a version bump publishes to npm and deploys
-  typedoc to GitHub Pages.
-
 ## Notes
 
 - The published `dist/` is ESM-only and extensionless — intended for bundler
