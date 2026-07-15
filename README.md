@@ -1,4 +1,4 @@
-# @humber-asv/visualizer
+# @humber-asv/visualizer-components
 
 Telemetry visualizer for the Humber ASV (Autonomous Surface Vehicle) — React
 components, Redux slices, MUI themes, factory programs, and basestation
@@ -12,7 +12,7 @@ format; image streams bypass Redux (only the stream URL is stored).
 ## Install
 
 ```sh
-npm install @humber-asv/visualizer
+npm install @humber-asv/visualizer-components
 ```
 
 Peer dependencies: `react@^19`, `react-dom@^19`, `@mui/material` (v7–v9),
@@ -28,8 +28,8 @@ import {
   TelemetryThemeProvider,
   TelemetryDashboard,
   configureTelemetryConnection,
-} from "@humber-asv/visualizer";
-import { initConnection } from "@humber-asv/visualizer/store";
+} from "@humber-asv/visualizer-components";
+import { initConnection } from "@humber-asv/visualizer-components/store";
 
 configureTelemetryConnection({
   httpBase: "http://localhost:8080",
@@ -51,9 +51,9 @@ export function App() {
 
 | Import | Contents |
 | --- | --- |
-| `@humber-asv/visualizer` | Components (dashboard, HUD panels, scenes, compasses, `RadiusVisualizer`, `ShipRudderVisualizer`, joystick, controls), providers, hooks, factory programs, connection config, types |
-| `@humber-asv/visualizer/store` | Redux store, typed hooks, all slice actions/selectors, connection thunks |
-| `@humber-asv/visualizer/theme` | `lightTheme`, `telemetryTheme`, `statusColors`, `setColors` (+ MUI palette augmentations) |
+| `@humber-asv/visualizer-components` | Components (dashboard, HUD panels, scenes, compasses, `RadiusVisualizer`, `ShipRudderVisualizer`, joystick, controls), providers, hooks, factory programs, connection config, types |
+| `@humber-asv/visualizer-components/store` | Redux store, typed hooks, all slice actions/selectors, connection thunks |
+| `@humber-asv/visualizer-components/theme` | `lightTheme`, `telemetryTheme`, `statusColors`, `setColors` (+ MUI palette augmentations) |
 
 ## Development
 
@@ -80,18 +80,6 @@ They must be published to npm before this package can be published.
 - `master` — stable integration.
 - `public` — release branch; pushing a version bump publishes to npm and deploys
   typedoc to GitHub Pages.
-
-### Consuming from the HumberASV website before publish
-
-The website links this package locally via `pnpm-workspace.yaml`:
-
-```yaml
-overrides:
-  "@humber-asv/visualizer": "link:../../visualizer-components"
-```
-
-Run `bun run build:watch` here while developing against the site — the site
-resolves the package through `dist/`.
 
 ## Notes
 
