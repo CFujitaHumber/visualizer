@@ -1,4 +1,4 @@
-# @humber-asv/visualizer-components
+# visualizer-components
 
 Telemetry visualizer for the Humber ASV (Autonomous Surface Vehicle) — React
 components, Redux slices, MUI themes, factory programs, and basestation
@@ -28,8 +28,8 @@ import {
   TelemetryThemeProvider,
   TelemetryDashboard,
   configureTelemetryConnection,
-} from "@humber-asv/visualizer-components";
-import { initConnection } from "@humber-asv/visualizer-components/store";
+} from "visualizer-components";
+import { initConnection } from "visualizer-components/store";
 
 configureTelemetryConnection({
   httpBase: "http://localhost:8080",
@@ -51,9 +51,9 @@ export function App() {
 
 | Import | Contents |
 | --- | --- |
-| `@humber-asv/visualizer-components` | Components (dashboard, HUD panels, scenes, compasses, `RadiusVisualizer`, `ShipRudderVisualizer`, joystick, controls), providers, hooks, factory programs, connection config, types |
-| `@humber-asv/visualizer-components/store` | Redux store, typed hooks, all slice actions/selectors, connection thunks |
-| `@humber-asv/visualizer-components/theme` | `lightTheme`, `telemetryTheme`, `statusColors`, `setColors` (+ MUI palette augmentations) |
+| `visualizer-components` | Components (dashboard, HUD panels, scenes, compasses, `RadiusVisualizer`, `ShipRudderVisualizer`, joystick, controls), providers, hooks, factory programs, connection config, types |
+| `visualizer-components/store` | Redux store, typed hooks, all slice actions/selectors, connection thunks |
+| `visualizer-components/theme` | `lightTheme`, `telemetryTheme`, `statusColors`, `setColors` (+ MUI palette augmentations) |
 
 ## Development
 
