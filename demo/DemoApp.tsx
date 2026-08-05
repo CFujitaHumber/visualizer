@@ -9,7 +9,7 @@
  *
  * Not shipped to npm — the published package contains only `dist/`.
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Box, Button, Stack } from "@mui/material";
 import {
   TelemetryProvider,
@@ -17,11 +17,13 @@ import {
   TelemetryDashboard,
   RadiusVisualizerPanel,
   ShipRudderVisualizerPanel,
+  TacticalMapPanel,
 } from "../src";
 import { useAppDispatch, startSimulation, regenerateMockTelemetry } from "../src/store";
 
 function DemoInner() {
   const dispatch = useAppDispatch();
+  const [isTacticalMapOpen, setIsTacticalMapOpen] = useState(false);
 
   // Boot straight into simulation mode — the demo has no basestation.
   useEffect(() => {
@@ -45,7 +47,7 @@ function DemoInner() {
           alignItems: "flex-end",
         }}
       >
-        <RadiusVisualizerPanel />
+        <RadiusVisualizerPanel onClick={() => setIsTacticalMapOpen(true)} />
         <ShipRudderVisualizerPanel />
         <Stack direction="row" spacing={1}>
           <Button
@@ -64,8 +66,18 @@ function DemoInner() {
           >
             Regenerate
           </Button>
+          <Button
+            data-testid="open-tactical-map"
+            size="small"
+            variant="outlined"
+            onClick={() => setIsTacticalMapOpen(true)}
+          >
+            Open Tactical Map
+          </Button>
         </Stack>
       </Stack>
+
+      <TacticalMapPanel open={isTacticalMapOpen} onClose={() => setIsTacticalMapOpen(false)} />
     </Box>
   );
 }

@@ -85,3 +85,17 @@ export interface RosOdometry {
     pose: { pose: RosPose; covariance: number[] };
     twist: { twist: RosTwist; covariance: number[] };
 }
+
+export interface RosOccupancyGrid {
+    info: MapMetaData;
+    data: number[];
+    header: RosHeader;
+}
+
+export interface MapMetaData {
+    map_load_time: { sec: number; nanosec: number };
+    resolution: number;
+    width: number;
+    height: number;
+    origin: RosPose;
+}
