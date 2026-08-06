@@ -307,13 +307,13 @@ export function generateMockStateUpdate(previous: Status): Status {
     if (!startCoords) startCoords = { lat: newLat, lon: newLon };
     const loc = measureLocalMeters(startCoords.lat, startCoords.lon, newLat, newLon);
     
-    let nextPathHistory = [...(previous.map?.courseTrail || [])];
-    let nextObstacles = [...(previous.zed?.objects || [])];
+    const nextPathHistory = [...(previous.map?.courseTrail || [])];
+    const nextObstacles = [...(previous.zed?.objects || [])];
     let nextLogs = [...previous.task.log];
 
     const lastPoint = nextPathHistory[nextPathHistory.length - 1];
     if (!lastPoint || Math.hypot(lastPoint.x - loc.x, lastPoint.y - loc.y) > 1) {
-        nextPathHistory.push({ x: loc.x, y: loc.y, h: newHeading });
+        nextPathHistory.push({ x: loc.x, y: loc.y, heading: newHeading });
         if (nextPathHistory.length > 1000) nextPathHistory.shift();
         
         // Randomly drop an obstacle sometimes

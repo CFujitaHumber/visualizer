@@ -9,7 +9,7 @@
  *
  * Not shipped to npm — the published package contains only `dist/`.
  */
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Button, Stack } from "@mui/material";
 import {
   TelemetryProvider,
@@ -17,16 +17,19 @@ import {
   TelemetryDashboard,
   RadiusVisualizerPanel,
   ShipRudderVisualizerPanel,
+  TacticalMapPanel,
 } from "../src";
+import type { Status } from "../src";
 import { useAppDispatch } from "../src/store";
 import { generateRandomState, generateMockStateUpdate, setTaskIndex, getTaskIndex, setManualMode, getManualMode, manualControls, setSimRunning, getSimRunning } from "../src/utils/njordTasksSim";
 import { SET_STATUS } from "../src/store/slices/telemetrySlice";
 
 function DemoInner() {
   const dispatch = useAppDispatch();
-  const simStateRef = useRef<any>(null);
+  const simStateRef = useRef<Status>(generateRandomState());
   const [isManual, setIsManual] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [isTacticalMapOpen, setIsTacticalMapOpen] = useState(false);
 
   useEffect(() => {
     // Initial State
@@ -78,6 +81,21 @@ function DemoInner() {
         <TelemetryDashboard title="Demo Log" placeholderSrc="/main_example_background.png" />
       </Box>
 
+      {/* Overlay column: RadiusVisualizer / ShipRudderVisualizer panel previews */}
+      <Stack
+        spacing={1.5}
+        sx={{
+          position: "absolute",
+          top: 96,
+          right: 16,
+          zIndex: 10,
+          alignItems: "flex-end",
+        }}
+      >
+        <RadiusVisualizerPanel onClick={() => setIsTacticalMapOpen(true)} />
+        <ShipRudderVisualizerPanel />
+      </Stack>
+
       {/* Sim controls moved above Propulsion */}
       <Stack
         spacing={1.5}
@@ -126,7 +144,7 @@ function DemoInner() {
             const oldState = simStateRef.current;
             
             // Advance task
-            const nextTask = setTaskIndex(getTaskIndex() + 1);
+            setTaskIndex(getTaskIndex() + 1);
             
             const newState = generateRandomState();
             
@@ -163,6 +181,8 @@ function DemoInner() {
           {isManual ? 'MANUAL ON (WASD)' : 'MANUAL OFF'}
         </Button>
       </Stack>
+
+      <TacticalMapPanel open={isTacticalMapOpen} onClose={() => setIsTacticalMapOpen(false)} />
     </Box>
   );
 }

@@ -197,8 +197,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
             // Lazy scaling: allow moving inside a minimum 50x50m viewport.
             // If the bounding box is smaller than 50m, pad it from its center,
             // so the camera only pans/scales once the boat exceeds the 50m box.
-            let bbW = maxX - minX;
-            let bbH = maxY - minY;
+            const bbW = maxX - minX;
+            const bbH = maxY - minY;
             if (bbW < 50) {
                 const cx = (minX + maxX) / 2;
                 minX = cx - 25;

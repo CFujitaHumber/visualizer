@@ -56,10 +56,10 @@ describe('telemetrySlice', () => {
   it('caps the course trail at 500 points', () => {
     let state = reducer(undefined, { type: '@@INIT' });
     for (let i = 0; i < 505; i++) {
-      state = reducer(state, appendCourseTrailPoint({ x: i, y: i, h: 0 }));
+      state = reducer(state, appendCourseTrailPoint({ x: i, y: i, heading: 0 }));
     }
     expect(state.map.courseTrail).toHaveLength(500);
     // oldest points were shifted out
-    expect(state.map.courseTrail[0]).toEqual({ x: 5, y: 5, h: 0 });
+    expect(state.map.courseTrail[0]).toEqual({ x: 5, y: 5, heading: 0 });
   });
 });

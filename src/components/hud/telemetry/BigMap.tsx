@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
+import type { CourseTrailPoint, DetectedObject } from '../../../types';
 
 export interface BigMapProps {
-  pathHistory: React.MutableRefObject<any[]>;
-  obstacles: React.MutableRefObject<any[]>;
+  pathHistory: React.MutableRefObject<CourseTrailPoint[]>;
+  obstacles: React.MutableRefObject<DetectedObject[]>;
   currentPos: React.MutableRefObject<{ x: number; y: number }>;
   headingRef: React.MutableRefObject<number>;
 }
@@ -130,8 +131,8 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
       
       // Ensure all mapped obstacles remain on screen
       obstacles.current.forEach(obs => {
-        const x = obs.position?.x ?? obs.x ?? 0;
-        const y = obs.position?.y ?? obs.y ?? 0;
+        const x = obs.position.x;
+        const y = obs.position.y;
         maxViewDistX = Math.max(maxViewDistX, Math.abs(x - cameraCX) + 40);
         maxViewDistY = Math.max(maxViewDistY, Math.abs(y - cameraCY) + 40);
       });
@@ -199,7 +200,7 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
       ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
       ctx.beginPath();
       pathHistory.current.forEach((pt) => {
-        const sweptConeAngle = Math.PI / 2 - (pt.h * Math.PI) / 180;
+        const sweptConeAngle = Math.PI / 2 - (pt.heading * Math.PI) / 180;
         ctx.moveTo(pt.x, pt.y);
         ctx.arc(pt.x, pt.y, 40, sweptConeAngle - Math.PI / 6, sweptConeAngle + Math.PI / 6);
         ctx.lineTo(pt.x, pt.y);
@@ -213,9 +214,9 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
 
       // Mapped Objects
       ctx.lineWidth = 1 / scale;
-      obstacles.current.forEach((obs: any) => {
-        const x = obs.position?.x ?? obs.x ?? 0;
-        const y = obs.position?.y ?? obs.y ?? 0;
+      obstacles.current.forEach((obs) => {
+        const x = obs.position.x;
+        const y = obs.position.y;
         const isHome = obs.label === "Home Dock";
         
         let fill = 'rgba(239, 68, 68, 0.2)';
@@ -292,7 +293,8 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, []);
+    // currentPos/headingRef/obstacles/pathHistory are stable refs read fresh each frame — the render loop only needs to (re)start on mount.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{

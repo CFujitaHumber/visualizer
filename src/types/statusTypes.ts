@@ -14,7 +14,8 @@ import type { DetectedObject } from "./detectedObjectsTypes";
 type CourseTrailPoint = {
     x: number;
     y: number;
-    h: number;
+    /** ASV heading in degrees at this trail point. */
+    heading: number;
 };
 
 type ZedPosition = { x: number; y: number; z: number };

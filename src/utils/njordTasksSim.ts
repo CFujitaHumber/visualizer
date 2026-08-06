@@ -173,7 +173,7 @@ export function generateRandomState(): Status {
         map: {
             occupancyGrid: [],
             navigationGrid: [],
-            courseTrail: [{ x: 0, y: 0, h: 0 }],
+            courseTrail: [{ x: 0, y: 0, heading: 0 }],
         },
         planning: {
             status: manualMode ? TaskValues.standby : TaskValues.autonomous,
@@ -228,7 +228,7 @@ export function generateMockStateUpdate(previous: Status): Status {
     let targetRudder = manualMode ? manualControls.rudderPct : 0;
     
     let nextLogs = [...previous.task.log];
-    let nextObstacles = [...previous.zed.objects];
+    const nextObstacles = [...previous.zed.objects];
 
     // --- Autonomous Logic ---
     if (!manualMode && simRunning) {
@@ -260,7 +260,7 @@ export function generateMockStateUpdate(previous: Status): Status {
         } else {
             // Path Following
             let tx, ty;
-            let target = PREDEFINED_PATH[currentPathIndex];
+            const target = PREDEFINED_PATH[currentPathIndex];
             
             if (returningToAuto) {
                 tx = lastAutoPos.x;
@@ -347,10 +347,10 @@ export function generateMockStateUpdate(previous: Status): Status {
     const newCoords = unmeasureLocalMeters(startCoords.lat, startCoords.lon, newLocX, newLocY);
 
     // Track path history
-    let nextPathHistory = [...(previous.map?.courseTrail || [])];
+    const nextPathHistory = [...(previous.map?.courseTrail || [])];
     const lastPoint = nextPathHistory[nextPathHistory.length - 1];
     if (!lastPoint || Math.hypot(lastPoint.x - newLocX, lastPoint.y - newLocY) > 1) {
-        nextPathHistory.push({ x: newLocX, y: newLocY, h: newHeading });
+        nextPathHistory.push({ x: newLocX, y: newLocY, heading: newHeading });
         if (nextPathHistory.length > 2000) nextPathHistory.shift();
     }
     
