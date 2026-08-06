@@ -165,7 +165,7 @@ export default function MappingScene() {
                 pendingAutoClearPosRef.current = null;
                 lastPointRef.current = { x: globalX, y: globalY };
                 dispatch(clearCourseTrail());
-                dispatch(appendCourseTrailPoint({ x: globalX, y: globalY }));
+                dispatch(appendCourseTrailPoint({ x: globalX, y: globalY, h: 0 }));
             }
             return;
         }
@@ -178,10 +178,10 @@ export default function MappingScene() {
         if (prev !== null && dist >= WRAP_DIST) {
             lastPointRef.current = { x: globalX, y: globalY };
             dispatch(clearCourseTrail());
-            dispatch(appendCourseTrailPoint({ x: globalX, y: globalY }));
+            dispatch(appendCourseTrailPoint({ x: globalX, y: globalY, h: 0 }));
         } else if (prev === null || dist >= SAMPLE_DIST) {
             lastPointRef.current = { x: globalX, y: globalY };
-            dispatch(appendCourseTrailPoint({ x: globalX, y: globalY }));
+            dispatch(appendCourseTrailPoint({ x: globalX, y: globalY, h: 0 }));
         }
     }, [globalX, globalY]); // eslint-disable-line react-hooks/exhaustive-deps
 

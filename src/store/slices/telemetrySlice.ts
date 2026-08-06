@@ -33,6 +33,7 @@ const telemetrySlice = createSlice({
             if (incomingMap) {
                 if ('occupancyGrid'  in incomingMap) state.map.occupancyGrid  = incomingMap.occupancyGrid!;
                 if ('navigationGrid' in incomingMap) state.map.navigationGrid = incomingMap.navigationGrid!;
+                if ('courseTrail' in incomingMap) state.map.courseTrail = incomingMap.courseTrail!;
             }
         },
         setMapOccupancyGrid: (state, action: PayloadAction<Grid>) => { state.map.occupancyGrid = action.payload; },
@@ -78,6 +79,7 @@ const telemetrySlice = createSlice({
             if (incomingMap) {
                 if ('occupancyGrid'  in incomingMap) state.map.occupancyGrid  = incomingMap.occupancyGrid;
                 if ('navigationGrid' in incomingMap) state.map.navigationGrid = incomingMap.navigationGrid;
+                if ('courseTrail' in incomingMap) state.map.courseTrail = incomingMap.courseTrail;
             }
             if (!state.map.courseTrail) state.map.courseTrail = [];
         });

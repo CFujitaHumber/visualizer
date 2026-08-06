@@ -14,6 +14,7 @@ import type { DetectedObject } from "./detectedObjectsTypes";
 type CourseTrailPoint = {
     x: number;
     y: number;
+    h: number;
 };
 
 type ZedPosition = { x: number; y: number; z: number };
