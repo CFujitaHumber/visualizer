@@ -18,8 +18,8 @@ import {
 import generateRandomState, { generateMockStateUpdate, generateMockVideoUrl } from '../../utils/telemetry/telemetryFactory';
 import type { TelemetryActionTypes } from '../../types/telemetryInterfaces';
 import type { Status as TelemetryState } from '../../types';
-import type { AppDispatch } from '../store';
-import { SET_STATUS } from '../slices/telemetrySlice';
+import type { AppDispatch, RootState } from '../store';
+import { SET_STATUS, clearFrameOrigin, clearCourseTrail } from '../slices/telemetrySlice';
 import { setFineGrid } from '../slices/simulationSlice';
 import { setVideoStreamUrl } from '../slices/videoSlice';
 /**
@@ -45,6 +45,37 @@ export const fetchTelemetryFailure = (error: string): TelemetryActionTypes => ({
 // Additional action creators for starting and stopping mock telemetry updates can be added here,
 let mockTelemetryInterval: ReturnType<typeof setInterval> | null = null;
 let mockTelemetryState: TelemetryState | null = null;
+
+/** Interval between mock ticks, in ms. Kept in one place so the dead-reckoning dt matches. */
+const MOCK_TICK_MS = 1000;
+
+/**
+ * Advances the mock state one tick and pushes it into the store.
+ *
+ * @remarks
+ * `asv` used to be stripped from this dispatch. That protected the manual-sim
+ * joystick — which owns `asv.heading`/`asv.speed` while the user is steering —
+ * from being overwritten every second, but it also froze latitude/longitude for
+ * the entire session, so nothing that measures movement in metres (the course
+ * trail, COG) ever saw the vessel move. Now the joystick's values are read back
+ * out of the store and fed *into* the generator when it is driving, so position
+ * still advances without the two fighting.
+ */
+const tickMockTelemetry = (dispatch: AppDispatch, getState: () => RootState) => {
+    if (!mockTelemetryState) return;
+
+    const state = getState();
+    const manualDriving = state.connection.status !== 'connected' && state.simulation.simMode === 'manual';
+
+    const next = generateMockStateUpdate(mockTelemetryState, {
+        dtSeconds: MOCK_TICK_MS / 1000,
+        heading: manualDriving ? state.telemetry.asv.heading : undefined,
+        speed: manualDriving ? state.telemetry.asv.speed : undefined,
+    });
+
+    mockTelemetryState = next;
+    dispatch(SET_STATUS(next));
+};
 
 /**
  * @description
@@ -73,7 +104,7 @@ export const getMockStatus = () => {
  * @returns A thunk action that initiates the mock telemetry updates.
  */
 export const startMockTelemetryUpdates = () => {
-    return (dispatch: AppDispatch) => {
+    return (dispatch: AppDispatch, getState: () => RootState) => {
         if (mockTelemetryInterval) {
             return;
         }
@@ -89,16 +120,7 @@ export const startMockTelemetryUpdates = () => {
         }
         dispatch(fetchTelemetrySuccess(current));
 
-        mockTelemetryInterval = setInterval(() => {
-            if (!mockTelemetryState) {
-                return;
-            }
-
-            const next = generateMockStateUpdate(mockTelemetryState);
-            mockTelemetryState = next;
-            const { asv: _asv, ...statusUpdate } = next;
-            dispatch(SET_STATUS(statusUpdate));
-        }, 1000);
+        mockTelemetryInterval = setInterval(() => tickMockTelemetry(dispatch, getState), MOCK_TICK_MS);
     };
 };
 
@@ -120,7 +142,7 @@ export const stopMockTelemetryUpdates = () => {
  * restarting the update interval. Useful for getting a new map layout on demand.
  */
 export const regenerateMockTelemetry = () => {
-    return (dispatch: AppDispatch) => {
+    return (dispatch: AppDispatch, getState: () => RootState) => {
         if (mockTelemetryInterval) {
             clearInterval(mockTelemetryInterval);
             mockTelemetryInterval = null;
@@ -128,17 +150,15 @@ export const regenerateMockTelemetry = () => {
 
         const { status, fineGrid } = generateRandomState();
         mockTelemetryState = status;
+        // A regenerated world is a genuinely new frame — drop the latched origin so it
+        // re-anchors on the new starting fix instead of measuring from the old one.
+        dispatch(clearFrameOrigin());
+        dispatch(clearCourseTrail());
         dispatch(fetchTelemetrySuccess(status));
         dispatch(setFineGrid(fineGrid));
         dispatch(setVideoStreamUrl(generateMockVideoUrl()));
 
-        mockTelemetryInterval = setInterval(() => {
-            if (!mockTelemetryState) return;
-            const next = generateMockStateUpdate(mockTelemetryState);
-            mockTelemetryState = next;
-            const { asv: _asv, ...statusUpdate } = next;
-            dispatch(SET_STATUS(statusUpdate));
-        }, 1000);
+        mockTelemetryInterval = setInterval(() => tickMockTelemetry(dispatch, getState), MOCK_TICK_MS);
     };
 };
 

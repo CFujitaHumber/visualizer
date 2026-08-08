@@ -25,7 +25,7 @@
  * />
  */
 import React from 'react';
-import { Box, Typography, useTheme } from '@mui/material';
+import { Box, Tooltip, Typography, useTheme } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useSpring, animated } from '@react-spring/web';
 
@@ -121,7 +121,7 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
     longitude,
     obstacles,
     rangeM = 40,
-    size = 120,
+    size = 100,
     title = 'MINIMAP',
     onClick,
 }) => {
@@ -135,7 +135,6 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
     const boatColor = telemetry?.accent ?? theme.palette.primary.light;
     const textPrimary = telemetry?.text.primary ?? theme.palette.text.primary;
     const textSecondary = telemetry?.text.secondary ?? theme.palette.text.secondary;
-    const borderLight = telemetry?.border.light ?? theme.palette.divider;
 
     const center = size / 2;
     const scalePx = center / rangeM; // px per meter
@@ -182,41 +181,40 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
         });
     }, [heading, center, compass, textSecondary]);
 
+    const tooltipText = onClick ? 'Click to open the tactical map' : 'Heading-up radar minimap';
+
     return (
-        <Box
-            data-testid="radius-visualizer"
-            onClick={onClick}
-            sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                p: '12px 15px',
-                backgroundColor: telemetry?.background.primary,
-                border: `1px solid ${borderLight}`,
-                borderRadius: 2,
-                backdropFilter: 'blur(10px)',
-                width: size + 60,
-                color: textPrimary,
-                fontFamily: 'monospace',
-                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.5)',
-                cursor: onClick ? 'pointer' : 'default',
-                transition: 'border-color 0.2s',
-                '&:hover': onClick ? { borderColor: theme.palette.primary.light } : undefined,
-            }}
-        >
-            <Typography
-                variant="caption"
+        <Tooltip title={tooltipText}>
+            <Box
+                data-testid="radius-visualizer"
+                onClick={onClick}
                 sx={{
-                    fontWeight: 700,
-                    fontSize: '11px',
-                    mb: 1,
-                    textTransform: 'uppercase',
-                    letterSpacing: '1px',
-                    color: textSecondary,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    p: '12px 15px',
+                    width: '100%',
+                    height: '100%',
+                    color: textPrimary,
+                    fontFamily: 'monospace',
+                    cursor: onClick ? 'pointer' : 'default',
+                    transition: 'border-color 0.2s',
+                    '&:hover': onClick ? { borderColor: theme.palette.primary.light } : undefined,
                 }}
             >
-                {title}
-            </Typography>
+                <Typography
+                    variant="caption"
+                    sx={{
+                        fontWeight: 700,
+                        fontSize: '11px',
+                        mb: 1,
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px',
+                        color: textSecondary,
+                    }}
+                >
+                    {title}
+                </Typography>
 
             {/* Radar circle */}
             <Box
@@ -287,15 +285,17 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
                 </g>
             </Box>
 
-            <Box sx={{ mt: 1, textAlign: 'center', lineHeight: 1.4 }}>
+                
+            {((!latitude || !longitude) || <Box sx={{ mt: 1, textAlign: 'center', lineHeight: 1.4 }}>
                 <Typography variant="caption" component="div" sx={{ fontSize: '10px', color: textSecondary }}>
                     LAT: {latitude !== undefined ? latitude.toFixed(6) : 'N/A'}
                 </Typography>
                 <Typography variant="caption" component="div" sx={{ fontSize: '10px', color: textSecondary }}>
                     LON: {longitude !== undefined ? longitude.toFixed(6) : 'N/A'}
                 </Typography>
+            </Box>)}
             </Box>
-        </Box>
+        </Tooltip>
     );
 };
 

@@ -22,6 +22,28 @@ type CourseTrailPoint = {
 type ZedPosition = { x: number; y: number; z: number };
 type ZedOrientation = { roll: number; pitch: number; yaw: number };
 
+/**
+ * Client-only local tangent-plane origin. Never sent by the basestation — it is
+ * captured on the first valid GPS fix and then held fixed, so `asv.latitude`/
+ * `asv.longitude` can be converted into a stable local-meters frame (see
+ * `selectVesselLocalMeters`).
+ *
+ * @remarks
+ * This exists because `zed.odom.position` is NOT a usable common frame across
+ * modes: the real bridge fills it from the ZED's `nav_msgs/Odometry` (true
+ * meters), while the basestation's factory mode deliberately mirrors
+ * `asv.longitude`/`asv.latitude` into it (degrees). Map consumers work in
+ * meters, so factory mode moved ~1e-5 units/tick and every distance threshold
+ * (course-trail sampling, teleport snap) silently never fired. Deriving the
+ * frame from GPS instead works identically in both modes.
+ */
+type Frame = {
+    originLatitude: number;
+    originLongitude: number;
+    /** False until the first non-null fix is seen; consumers should treat the frame as unusable. */
+    hasOrigin: boolean;
+};
+
 type Zed = {
     odom: {
         position: ZedPosition;
@@ -46,7 +68,7 @@ type Status = {
         occupancyGrid: Grid;
         navigationGrid: Grid;
         // The basestation doesn't send this either — built client-side instead, in
-        // TacticalMapPanel, from live zed.odom.position + asv.heading.
+        // TacticalMapPanel, from the GPS-derived local-meters frame + asv.heading.
         courseTrail: CourseTrailPoint[];
     };
     planning: {
@@ -84,6 +106,8 @@ type Status = {
         /** Names of the ROS2 topics/services the basestation bridge subscribes to. */
         topics: string[];
     };
+    /** Client-only — absent from every basestation payload. See {@link Frame}. */
+    frame: Frame;
 }
     
 const InitialStatus: Status = {
@@ -138,15 +162,30 @@ const InitialStatus: Status = {
     system: {
         topics: [],
     },
+    frame: {
+        originLatitude: 0,
+        originLongitude: 0,
+        hasOrigin: false,
+    },
 };
 
 // zed.objects[] positions arrive boat-relative (x = right, y = forward) from the
 // basestation — the bridge has no TF2/GPS fusion, so it can't transform them itself.
-// The frontend projects them into the same world frame zed.odom.position is expressed
-// in (using asv.heading + zed.odom.position as the rotation/anchor) at ingestion time,
-// in telemetrySlice's setZedObjects and FETCH_TELEMETRY_SUCCESS reducers — see those
-// for the actual transform. zed.odom.{position,orientation} themselves are the ZED's
-// own local visual-odometry frame and are used as-is (not fused with GPS/compass).
+// They are STORED that way, exactly as received: the reducers no longer rewrite them.
+// Consumers that need world-frame obstacles select them through
+// `selectZedObjectsWorld`, which rotates by asv.heading and anchors to the
+// GPS-derived local-meters position. Consumers that want the raw boat-relative
+// reading (the radar/minimap, whose whole display is boat-centric) read
+// `zed.objects` directly.
+//
+// This split replaced an earlier design that projected at ingestion time. That was
+// wrong twice over: `setZedObjects` and FETCH_TELEMETRY_SUCCESS projected but
+// SET_STATUS did not, so the same field meant different things depending on which
+// action last wrote it; and RadiusVisualizerPanel still treated the stored value as
+// boat-relative, plotting world coordinates on a 40 m radar.
+//
+// zed.odom.{position,orientation} are the ZED's own local visual-odometry frame and
+// are used as-is (not fused with GPS/compass). They are NOT the map frame — see {@link Frame}.
 
-export type { Status, CourseTrailPoint, Zed, ZedPosition, ZedOrientation };
+export type { Status, CourseTrailPoint, Zed, ZedPosition, ZedOrientation, Frame };
 export { InitialStatus };

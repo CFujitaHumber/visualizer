@@ -30,6 +30,7 @@
   },
   "scripts": {
     "dev": "bun --hot demo/index.ts",
+    "sync-dev": "bun --hot demo/index.ts --live",
     "build": "tsc -p tsconfig.build.json",
     "build:watch": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
@@ -79,7 +80,7 @@
     "jest-environment-jsdom": "^30.4.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-isometric-engine": "^1.0.0",
+    "react-isometric-engine": "file:C:/Users/thefu/Github/react-isometric-engine",
     "react-redux": "^9.3.0",
     "selenium-webdriver": "^4.46.0",
     "ts-jest": "^29.4.11",

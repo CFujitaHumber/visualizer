@@ -39,6 +39,7 @@ export const MIN_BOAT_ICON_PX = 24;
  * square instead of a circle to distinguish it, not a different color.
  */
 export const OBJECT_COLOR_KEYS: Record<string, string> = {
+    // Simulation labels (njordTasksSim.ts).
     'Boundary Buoy': 'boundary',
     'Nav Green': 'navGreen',
     'Home Dock': 'navGreen',
@@ -49,6 +50,21 @@ export const OBJECT_COLOR_KEYS: Record<string, string> = {
     'Dock Buoy': 'dock',
     'Acoustic Beacon': 'beacon',
     'Island': 'island',
+
+    // Labels the deployed ONNX detector actually emits. Without these every real
+    // detection fell through to DEFAULT_OBJECT_COLOR_KEY and the whole buoy field
+    // rendered a single color, making the lateral marks impossible to tell apart.
+    // Matched to IALA meaning rather than to the sim names: the four cardinal marks
+    // share the hazard color because that is what they mark, and "otter" is a boat
+    // (the only non-buoy class the model knows), so it takes the beacon color to
+    // read as a vessel rather than as a mark.
+    green: 'navGreen',
+    red: 'navRed',
+    north: 'hazard',
+    east: 'hazard',
+    south: 'hazard',
+    west: 'hazard',
+    otter: 'beacon',
 };
 
 export const DEFAULT_OBJECT_COLOR_KEY = 'navRed';

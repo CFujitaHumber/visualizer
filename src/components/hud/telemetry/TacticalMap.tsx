@@ -24,12 +24,17 @@
  * @author Carson Fujita
  * @license MIT
  */
-import React, { useEffect, useRef, useState } from 'react';
-import { Box, Typography, Button } from '@mui/material';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Typography, IconButton, Stack, Tooltip } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
+import CloseIcon from '@mui/icons-material/Close';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import GpsFixedIcon from '@mui/icons-material/GpsFixed';
+import GpsNotFixedIcon from '@mui/icons-material/GpsNotFixed';
 import { useAppSelector } from '../../../store';
 import type { RootState } from '../../../store';
+import { selectVesselLocalMeters, selectZedObjectsWorld } from '../../../store/selectors/telemetrySelectors';
 import type { CourseTrailPoint, DetectedObject } from "../../../types";
 import { catamaranSvgStr } from '../../../assets/svgSources';
 import {
@@ -37,6 +42,7 @@ import {
     ROBOT_WIDTH_M,
     FOV_RADIUS_M,
     FOV_HALF_ANGLE_RAD,
+    MIN_BOAT_ICON_PX,
     OBJECT_COLOR_KEYS,
     DEFAULT_OBJECT_COLOR_KEY,
 } from '../../../utils/robot';
@@ -58,11 +64,18 @@ const pulseDot = keyframes`
   50% { opacity: 0.5; transform: scale(0.8); }
 `;
 
-/** Fixed on-screen boat-icon height (px), independent of zoom. Width is derived from the real hull's aspect ratio. */
-const BOAT_ICON_H_PX = 88;
-const BOAT_ICON_W_PX = BOAT_ICON_H_PX * (ROBOT_WIDTH_M / ROBOT_LENGTH_M);
+// The boat is drawn at true world scale (ROBOT_LENGTH_M x ROBOT_WIDTH_M) rather than
+// at a fixed pixel size — see the icon-drawing block in the render loop.
 
-type CameraMode = 'auto' | 'manual';
+/**
+ * - `auto`   — continuously re-fits the whole track/obstacle extent (the "reset view" target).
+ * - `follow` — keeps the vessel centred at the current zoom, so it never leaves frame.
+ * - `manual` — frozen wherever the user's last pan/pinch left it.
+ */
+type CameraMode = 'auto' | 'follow' | 'manual';
+
+/** How hard the follow camera lerps toward the vessel each frame. */
+const FOLLOW_LERP = 0.2;
 
 /** Manual zoom bounds, in canvas px per world meter. */
 const MIN_SCALE = 0.5;
@@ -83,12 +96,18 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
     // occupancyGrid isn't read here: Map.tsx's MapComponent already renders it
     // elsewhere, and the basestation has no live publisher for it yet (see the
     // `map` group in statusTypes.ts).
-    const ZedObjects = useAppSelector((state: RootState) => state.telemetry.zed.objects);
-    const odom = useAppSelector((state: RootState) => state.telemetry.zed.odom.position);
+    // World-frame obstacles and vessel position both come from the shared local-meters
+    // frame (see selectVesselLocalMeters) — NOT zed.odom.position, which is metres on a
+    // live ASV but degrees in factory mode.
+    const ZedObjects = useAppSelector(selectZedObjectsWorld);
+    const odom = useAppSelector(selectVesselLocalMeters);
     // zed.odom.orientation isn't used for the boat icon's rotation — asv.heading
     // (compass heading) is used instead, consistently with BigMap and the course trail.
     const headingASV = useAppSelector((state:RootState) => state.telemetry.asv.heading);
     const pathASV = useAppSelector((state: RootState) => state.telemetry.map.courseTrail);
+    // Drives the header status dot. `planning.status` is what the bridge derives from
+    // Task messages (see _ACTION_TO_STATUS) and is the same value the status chip shows.
+    const vesselStatus = useAppSelector((state: RootState) => state.telemetry.planning.status);
 
     //  Colors
     const bgDefault = theme.palette.background.default;
@@ -101,7 +120,24 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
     const badgeBg = telemetry?.background.tertiary ?? alpha(textPrimary, 0.05);
     const legendBg = telemetry?.background.primary ?? alpha(theme.palette.background.paper, 0.85);
     const mappedAreaColor = theme.palette.info.main;
+    // Status dot color, keyed by the vessel's current mode (autonomous green, remote
+    // blue, standby amber, out of control red, lost connection grey). Falls back to the
+    // generic accent if the telemetry palette isn't present, matching how every other
+    // color in this component degrades.
+    const statusColor = theme.palette.status?.primary?.[vesselStatus] ?? accent;
     const obstacleColor = telemetry?.status.error ?? theme.palette.error.main;
+
+    // Mirrors SceneHUD's `useHudBtnSx` so the two toolbars read as one control
+    // language, using colors already resolved with fallbacks further up.
+    const hudBtnSx = useMemo(() => ({
+        width: 40,
+        height: 40,
+        backgroundColor: badgeBg,
+        border: `1px solid ${borderLight}`,
+        backdropFilter: 'blur(4px)',
+        '&:hover': { backgroundColor: alpha(accent, 0.2) },
+        '&.Mui-disabled': { color: textSecondary, opacity: 0.4 },
+    }), [badgeBg, borderLight, accent, textSecondary]);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const boatImgRef = useRef<HTMLImageElement | null>(null);
@@ -122,7 +158,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
     const dragStartRef = useRef<{ x: number; y: number; centerX: number; centerY: number } | null>(null);
     const pinchStartRef = useRef<{ distance: number; scale: number; midX: number; midY: number; worldX: number; worldY: number } | null>(null);
 
-    const recenter = () => setCameraMode('auto');
+    const resetView = () => setCameraMode('auto');
+    // Leaving follow drops to 'manual' rather than 'auto' so the view stays exactly
+    // where the user was looking instead of snapping back out to the full extent.
+    const toggleFollow = () => setCameraMode((mode) => (mode === 'follow' ? 'manual' : 'follow'));
 
     const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -198,6 +237,16 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
 
     const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
         event.preventDefault();
+
+        // Zooming while following adjusts zoom only and stays in follow — the render
+        // loop owns the centre in that mode, so writing a cursor-anchored centre here
+        // would just be lerped away and fight the user.
+        if (cameraModeRef.current === 'follow') {
+            const { scale } = cameraRef.current;
+            cameraRef.current.scale = clamp(scale * Math.exp(-event.deltaY * 0.001), MIN_SCALE, MAX_SCALE);
+            return;
+        }
+
         setCameraMode('manual');
         const rect = event.currentTarget.getBoundingClientRect();
         const { scale, centerX, centerY } = cameraRef.current;
@@ -255,7 +304,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
             const odom = odomRef.current;
             const headingASV = headingRef.current;
             const pathASV = pathRef.current;
-            const objectColors = themeRef.current.palette.telemetry?.objects;
+            // Theme values are read off the ref (not closed over) for the same reason the
+            // telemetry values are: this loop is started once on mount, so anything
+            // captured in its closure would freeze at the theme active at first render.
+            const palette = themeRef.current.palette;
+            const objectColors = palette.telemetry?.objects;
+            const bgNow = palette.background.default;
+            const cogColor = palette.telemetry?.accent ?? palette.primary.light;
 
             const rect = canvas.parentElement?.getBoundingClientRect();
             if (rect && (canvas.width !== rect.width || canvas.height !== rect.height)) {
@@ -344,10 +399,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
             const targetCY = (minY + maxY) / 2;
 
             // 'auto' continuously lerps toward the bbox-fit target computed above.
+            // 'follow' holds the user's zoom but keeps the vessel centred.
             // 'manual' leaves the camera alone — pointer/wheel handlers already
             // wrote directly into cameraRef in response to the user's gesture.
+            const camera = cameraRef.current;
             if (cameraModeRef.current === 'auto') {
-                const camera = cameraRef.current;
                 if (camera.scale === 0) {
                     camera.scale = targetScale;
                     camera.centerX = targetCX;
@@ -357,6 +413,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
                     camera.centerX += (targetCX - camera.centerX) * 0.1;
                     camera.centerY += (targetCY - camera.centerY) * 0.1;
                 }
+            } else if (cameraModeRef.current === 'follow') {
+                // Track the *smoothed* position, not the raw one — the same lerped
+                // value the hull is drawn at, so the boat sits still under the camera
+                // instead of jittering against it on every telemetry frame.
+                if (camera.scale === 0) camera.scale = targetScale;
+                camera.centerX += (smoothX - camera.centerX) * FOLLOW_LERP;
+                camera.centerY += (smoothY - camera.centerY) * FOLLOW_LERP;
             }
 
             const scale = cameraRef.current.scale || 1;
@@ -415,6 +478,56 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
             ctx.lineTo(smoothX, smoothY);
             ctx.fill();
 
+            // Course over ground: the actual track the vessel has sailed, from its
+            // origin fix to where it is now. Distinct from the swept-area fill above —
+            // that shows what the camera has *seen*, this shows where the hull has
+            // *been*. Widths are divided by scale so they stay constant on screen at
+            // any zoom rather than growing into slabs when zoomed in.
+            if (pathASV.length > 0) {
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+
+                const tracePath = () => {
+                    ctx.beginPath();
+                    ctx.moveTo(pathASV[0].x, pathASV[0].y);
+                    for (let i = 1; i < pathASV.length; i++) ctx.lineTo(pathASV[i].x, pathASV[i].y);
+                    // Run the last leg to the smoothed live position so the track meets
+                    // the hull instead of stopping at the last sampled point.
+                    ctx.lineTo(smoothX, smoothY);
+                };
+
+                // Wide, faint underlay so the track stays legible over the swept-area fill.
+                ctx.strokeStyle = alpha(cogColor, 0.25);
+                ctx.lineWidth = 6 / scale;
+                tracePath();
+                ctx.stroke();
+
+                ctx.strokeStyle = cogColor;
+                ctx.lineWidth = 2 / scale;
+                tracePath();
+                ctx.stroke();
+
+                // Origin marker — where this track began.
+                const origin = pathASV[0];
+                ctx.fillStyle = bgNow;
+                ctx.strokeStyle = cogColor;
+                ctx.lineWidth = 2 / scale;
+                ctx.beginPath();
+                ctx.arc(origin.x, origin.y, 5 / scale, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.save();
+                ctx.translate(origin.x, origin.y);
+                ctx.scale(1 / scale, -1 / scale);
+                ctx.fillStyle = cogColor;
+                ctx.font = 'bold 10px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('ORIGIN', 0, -9);
+                ctx.restore();
+            }
+
             // Mapped obstacles, colored per label (same mapping as BigMap).
             ctx.lineWidth = 1 / scale;
             ZedObjects.forEach((obs: DetectedObject) => {
@@ -427,6 +540,24 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
                 ctx.arc(obs.position.x, obs.position.y, 4 / scale, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
+
+                // Label. Drawn inside a flipped sub-transform: the world frame has +Y up,
+                // so text rendered directly into it comes out mirrored. Undoing the camera
+                // scale here also keeps the type at a fixed readable size at any zoom.
+                ctx.save();
+                ctx.translate(obs.position.x, obs.position.y);
+                ctx.scale(1 / scale, -1 / scale);
+                ctx.font = 'bold 11px monospace';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                const text = obs.label.toUpperCase();
+                // Dark backing plate so labels stay readable against the swept-area fill.
+                const textWidth = ctx.measureText(text).width;
+                ctx.fillStyle = alpha(bgNow, 0.7);
+                ctx.fillRect(7, -7, textWidth + 4, 14);
+                ctx.fillStyle = stroke;
+                ctx.fillText(text, 9, 0);
+                ctx.restore();
             });
 
             // Vision cone
@@ -446,16 +577,27 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
             ctx.fill();
             ctx.restore();
 
-            // Boat icon (always rendered at a fixed screen size — see BOAT_ICON_*_PX
-            // above, matching the real hull's aspect ratio — aligned with heading)
+            // Boat icon, drawn at the hull's real size (ROBOT_LENGTH_M x ROBOT_WIDTH_M)
+            // so it scales with the map like everything else — previously it was pinned
+            // to a fixed 88px regardless of zoom, which made a ~1m vessel look like it
+            // spanned tens of metres on a zoomed-out course.
+            //
+            // The floor at MIN_BOAT_ICON_PX (matching BigMap) is the one concession:
+            // auto-fit zooms out to hold the whole track, and at a few hundred metres
+            // across a true-scale 0.97m hull would be sub-pixel and vanish entirely.
             if (boatImgRef.current) {
+                const lengthPx = ROBOT_LENGTH_M * scale;
+                const drawLenM = lengthPx < MIN_BOAT_ICON_PX ? MIN_BOAT_ICON_PX / scale : ROBOT_LENGTH_M;
+                const drawWidM = drawLenM * (ROBOT_WIDTH_M / ROBOT_LENGTH_M);
+
                 ctx.save();
                 ctx.translate(currentX, currentY);
-                // Revert camera scale back to 1:1 pixels for the icon (X right, Y down).
-                ctx.scale(1 / scale, -1 / scale);
-                // Standard canvas rotation is clockwise; heading is clockwise.
+                // Flip Y only: the world frame has +Y up but images draw +Y down, so
+                // without this the hull renders upside down. Units stay world metres.
+                ctx.scale(1, -1);
+                // Canvas rotation is clockwise in this flipped frame; heading is clockwise.
                 ctx.rotate((heading * Math.PI) / 180);
-                ctx.drawImage(boatImgRef.current, -BOAT_ICON_W_PX / 2, -BOAT_ICON_H_PX / 2, BOAT_ICON_W_PX, BOAT_ICON_H_PX);
+                ctx.drawImage(boatImgRef.current, -drawWidM / 2, -drawLenM / 2, drawWidM, drawLenM);
                 ctx.restore();
             }
 
@@ -517,16 +659,22 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
                             margin: 0,
                         }}
                     >
-                        <Box
-                            component="span"
-                            sx={{
-                                width: '12px',
-                                height: '12px',
-                                backgroundColor: accent,
-                                borderRadius: '50%',
-                                animation: `${pulseDot} 2s infinite`,
-                            }}
-                        />
+                        <Tooltip title={`Vessel status: ${vesselStatus}`} placement="bottom">
+                            <Box
+                                component="span"
+                                sx={{
+                                    width: '12px',
+                                    height: '12px',
+                                    backgroundColor: statusColor,
+                                    borderRadius: '50%',
+                                    // Glow tracks the status color too — a plain fill swap
+                                    // reads as a dead indicator next to a colored halo.
+                                    boxShadow: `0 0 8px 2px ${alpha(statusColor, 0.6)}`,
+                                    animation: `${pulseDot} 2s infinite`,
+                                    transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
+                                }}
+                            />
+                        </Tooltip>
                         Tactical Map (2D)
                     </Typography>
                     <Box
@@ -543,47 +691,41 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
                         LOCAL SLAM COORDINATES
                     </Box>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Button
-                        onClick={recenter}
-                        disabled={cameraMode === 'auto'}
-                        sx={{
-                            color: textSecondary,
-                            backgroundColor: badgeBg,
-                            border: `1px solid ${borderLight}`,
-                            padding: '8px 16px',
-                            borderRadius: '6px',
-                            fontWeight: 'bold',
-                            '&:hover': {
-                                backgroundColor: accent,
-                                color: bgDefault,
-                            },
-                            '&.Mui-disabled': {
-                                color: textSecondary,
-                                opacity: 0.4,
-                            },
-                        }}
-                    >
-                        Recenter
-                    </Button>
-                    <Button
-                        onClick={onClose}
-                        sx={{
-                            color: textSecondary,
-                            backgroundColor: badgeBg,
-                            border: `1px solid ${borderLight}`,
-                            padding: '8px 16px',
-                            borderRadius: '6px',
-                            fontWeight: 'bold',
-                            '&:hover': {
-                                backgroundColor: accent,
-                                color: bgDefault,
-                            },
-                        }}
-                    >
-                        Close Map
-                    </Button>
-                </Box>
+                {/* Icon toolbar, matching the System Visualizer's HUD controls
+                    (see SceneHUD's Toolbar) — same 40px translucent buttons and
+                    tooltip placement, but built from this component's own safely
+                    resolved telemetry palette rather than the scene palette, which
+                    isn't guaranteed to exist under TelemetryThemeProvider. */}
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <Tooltip title="Reset view" placement="bottom">
+                        {/* Disabled buttons don't emit the events Tooltip listens for,
+                            so it needs a real element to anchor to — hence the span. */}
+                        <span>
+                            <IconButton
+                                onClick={resetView}
+                                disabled={cameraMode === 'auto'}
+                                aria-label="Reset view"
+                                sx={{ ...hudBtnSx, color: cameraMode === 'auto' ? textSecondary : accent }}
+                            >
+                                <RestartAltIcon fontSize="small" />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                    <Tooltip title={cameraMode === 'follow' ? 'Stop following vessel' : 'Follow vessel'} placement="bottom">
+                        <IconButton
+                            onClick={toggleFollow}
+                            aria-label={cameraMode === 'follow' ? 'Stop following vessel' : 'Follow vessel'}
+                            sx={{ ...hudBtnSx, color: cameraMode === 'follow' ? accent : textSecondary }}
+                        >
+                            {cameraMode === 'follow' ? <GpsFixedIcon fontSize="small" /> : <GpsNotFixedIcon fontSize="small" />}
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Close map" placement="bottom">
+                        <IconButton onClick={onClose} aria-label="Close map" sx={{ ...hudBtnSx, color: textSecondary }}>
+                            <CloseIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                </Stack>
             </Box>
 
             {/* 2D canvas */}
@@ -623,6 +765,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '8px' }}>
                         <Box sx={{ width: '12px', height: '12px', backgroundColor: alpha(mappedAreaColor, 0.2), border: `1px solid ${alpha(mappedAreaColor, 0.5)}` }} />
                         <Typography component="span" sx={{ fontSize: 'inherit' }}>Mapped Area</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '8px' }}>
+                        <Box sx={{ width: '12px', height: '2px', backgroundColor: accent }} />
+                        <Typography component="span" sx={{ fontSize: 'inherit' }}>Course Over Ground</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Box sx={{ width: '12px', height: '12px', backgroundColor: alpha(obstacleColor, 0.2), border: `1px solid ${obstacleColor}`, borderRadius: '50%' }} />

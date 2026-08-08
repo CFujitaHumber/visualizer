@@ -215,6 +215,8 @@ export function generateRandomState(): Status {
             camera: { active: false, width: 0, height: 0, encoding: "" }
         },
         system: { topics: MOCK_TOPICS },
+        // Client-only; latched from the first fix by telemetrySlice, not by the sim.
+        frame: { originLatitude: 0, originLongitude: 0, hasOrigin: false },
     };
 }
 

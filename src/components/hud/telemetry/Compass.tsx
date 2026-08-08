@@ -34,7 +34,11 @@ const formatHeadingLabel = (heading: number) => {
 export default function Compass() {
 	const theme = useTheme();
 
-	const taskData = useSelector((state: RootState) => state.telemetry.task.data);
+	// The vessel's own fix — `task.data.latitude/longitude` is the *task waypoint*, not
+	// the boat, and the bridge leaves it at 0/0 unless a Task message assigns one, which
+	// is why this readout used to sit at 0.0000° while GPS was reporting fine.
+	const latitude = useSelector((state: RootState) => state.telemetry.asv.latitude);
+	const longitude = useSelector((state: RootState) => state.telemetry.asv.longitude);
 	const heading = useSelector((state: RootState) => state.telemetry.asv.heading);
 	const normalizedHeading = wrapHeading(heading);
 
@@ -217,8 +221,10 @@ export default function Compass() {
 				{/* Coordinates */}
 				<Box
 					sx={{
-						paddingRight: "30%",
-						paddingLeft: "30%",
+						mt: "auto",
+						pb: 1,
+						paddingRight: { xs: "20%", sm: "5%" },
+						paddingLeft: { xs: "20%", sm: "5%" },
 						display: "flex",
 						flexDirection: "row",
 						justifyContent: "space-between",
@@ -226,10 +232,10 @@ export default function Compass() {
 					}}
 				>
 					<Typography variant="caption" sx={{ fontSize: "20px", color: theme.palette.telemetry?.text.primary }}>
-						Lat: {taskData?.latitude.toFixed(4)}°
+						Lat: {latitude.toFixed(4)}°
 					</Typography>
 					<Typography variant="caption" sx={{ fontSize: "20px", color: theme.palette.telemetry?.text.primary }}>
-						Lon: {taskData?.longitude.toFixed(4)}°
+						Lon: {longitude.toFixed(4)}°
 					</Typography>
 				</Box>
 			</Box>

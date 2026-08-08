@@ -20,7 +20,7 @@
  * <ShipRudderVisualizer portPower={45} stbdPower={52} rudderAngle={-12} />
  */
 import React from 'react';
-import { Box, Typography, useTheme } from '@mui/material';
+import { Box, Typography, Tooltip, useTheme } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useSpring, animated } from '@react-spring/web';
 import { getPowerColor } from './powerColor';
@@ -103,7 +103,6 @@ export const ShipRudderVisualizer: React.FC<ShipRudderVisualizerProps> = ({
     stbdPower,
     rudderAngle,
     maxRudderDeg = 30,
-    title = 'PROPULSION',
 }) => {
     const theme = useTheme();
     const telemetry = theme.palette.telemetry;
@@ -115,7 +114,6 @@ export const ShipRudderVisualizer: React.FC<ShipRudderVisualizerProps> = ({
     const lightColor = telemetry?.accent ?? theme.palette.secondary.main;
     const textPrimary = telemetry?.text.primary ?? theme.palette.text.primary;
     const textSecondary = telemetry?.text.secondary ?? theme.palette.text.secondary;
-    const borderLight = telemetry?.border.light ?? theme.palette.divider;
     const trackBg = telemetry?.background.tertiary ?? alpha(theme.palette.common.white, 0.15);
 
     const constrained = clamp(rudderAngle, -maxRudderDeg, maxRudderDeg);
@@ -137,42 +135,24 @@ export const ShipRudderVisualizer: React.FC<ShipRudderVisualizerProps> = ({
     );
 
     return (
-        <Box
-            data-testid="rudder-visualizer"
-            sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                p: '12px 15px',
-                backgroundColor: telemetry?.background.primary,
-                border: `1px solid ${borderLight}`,
-                borderRadius: 2,
-                backdropFilter: 'blur(10px)',
-                width: 230,
-                color: textPrimary,
-                fontFamily: 'monospace',
-                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.5)',
-            }}
-        >
-            <Typography
-                variant="caption"
+        <Tooltip title="Propulsion overview: thruster power and rudder angle">
+            <Box
+                data-testid="rudder-visualizer"
                 sx={{
-                    fontWeight: 700,
-                    fontSize: '11px',
-                    mb: 1,
-                    textTransform: 'uppercase',
-                    letterSpacing: '1px',
-                    color: textSecondary,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    p: '12px 15px',
+                    width: '100%',
+                    height: '100%',
+                    color: textPrimary,
                 }}
             >
-                {title}
-            </Typography>
-
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', height: 110, px: '5px' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', height: 92, px: '5px' }}>
                 <ThrusterBar label="PORT" power={portPower} />
 
                 {/* Top-down catamaran */}
-                <Box component="svg" viewBox="0 0 80 110" sx={{ width: 70, height: 95, opacity: 0.85 }}>
+                <Box component="svg" viewBox="0 0 80 110" sx={{ width: 70, height: 78, opacity: 0.85 }}>
                     {/* Hulls */}
                     <path
                         d="M 16 5 C 10 5, 8 20, 8 45 C 8 70, 8 85, 12 90 C 14 93, 18 93, 20 90 C 22 85, 22 75, 22 65 L 22 25 C 22 15, 20 5, 16 5 Z"
@@ -250,6 +230,7 @@ export const ShipRudderVisualizer: React.FC<ShipRudderVisualizerProps> = ({
                 </Box>
             </Box>
         </Box>
+        </Tooltip>
     );
 };
 

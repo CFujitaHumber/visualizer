@@ -405,8 +405,17 @@ export function generateRandomState(): { status: Status; fineGrid: Grid } {
         asv: {
             speed: randomBetween(0, 5),
             heading: randomBetween(0, 360),
-            longitude: randomBetween(-180, 180),
-            latitude: randomBetween(-90, 90),
+            // Deliberately a plausible operating area rather than randomBetween(-180, 180) /
+            // (-90, 90): the local-meters frame divides by cos(latitude), which collapses
+            // near the poles, and a fix in the middle of an ocean makes the readout look
+            // broken. Matches the basestation factory's Toronto-ish waterfront box.
+            longitude: randomBetween(-79.6, -79.5),
+            latitude: randomBetween(43.6, 43.7),
+        },
+        frame: {
+            originLatitude: 0,
+            originLongitude: 0,
+            hasOrigin: false,
         },
         signal: {
             strength: randomBetween(0, 100),
@@ -442,11 +451,44 @@ export function generateMockVideoUrl(): string {
  * @returns a new State object with updated values based on the previous state, 
  *  with random variations applied to simulate changes over time.
  */
-export function generateMockStateUpdate(previous: Status): Status {
+/** Metres per degree of latitude — good to ~0.1% anywhere, which is well inside mock fidelity. */
+const METERS_PER_DEG_LAT = 111320;
+
+/**
+ * Options for {@link generateMockStateUpdate}.
+ */
+export interface MockUpdateOptions {
+    /** Seconds since the previous update. Defaults to 1. */
+    dtSeconds?: number;
+    /**
+     * Heading/speed to use instead of random-walking them. Passed when something
+     * else already owns the vessel's motion — the manual-sim joystick — so the
+     * mock advances position to match rather than fighting it every tick.
+     */
+    heading?: number;
+    speed?: number;
+}
+
+export function generateMockStateUpdate(previous: Status, options: MockUpdateOptions = {}): Status {
     const nextTaskLog = [...previous.task.log, randomChoice(exampleLogData)].slice(-10);
+    const dt = options.dtSeconds ?? 1;
+
+    // Evolve the vessel's own motion. Previously this function left `asv` untouched
+    // and the caller stripped it anyway, so latitude/longitude/heading never changed
+    // for the whole session — which meant the course trail (built from movement in
+    // metres) had nothing to record and stayed a single point forever.
+    const heading = options.heading ?? (previous.asv.heading + randomStep(0.5, 4) + 360) % 360;
+    const speed = options.speed ?? clamp(previous.asv.speed + randomStep(0.05, 0.3), 0, 5);
+
+    const headingRad = (heading * Math.PI) / 180;
+    const distanceM = speed * dt;
+    const latitude = previous.asv.latitude + (Math.cos(headingRad) * distanceM) / METERS_PER_DEG_LAT;
+    const cosLat = Math.cos((previous.asv.latitude * Math.PI) / 180) || 1e-6;
+    const longitude = previous.asv.longitude + (Math.sin(headingRad) * distanceM) / (METERS_PER_DEG_LAT * cosLat);
 
     return {
         ...previous,
+        asv: { speed, heading, latitude, longitude },
         signal: {
             strength: clamp(previous.signal.strength + randomStep(1, 4), 0, 100),
         },

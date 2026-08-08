@@ -20,3 +20,4 @@ export * from './slices/simulationSlice';
 export * from './slices/videoSlice';
 export * from './slices/discoveredGridSlice';
 export * from './slices/sceneSlice';
+export * from './selectors/telemetrySelectors';

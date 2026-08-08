@@ -40,16 +40,50 @@ describe('TacticalMap', () => {
     expect(container.querySelector('canvas')).toBeInTheDocument();
   });
 
+  it('renders the legend entry for the course-over-ground track', () => {
+    renderMap();
+    expect(screen.getByText('Course Over Ground')).toBeInTheDocument();
+  });
+
+  // The header controls are icon buttons (matching the System Visualizer's HUD
+  // toolbar), so they are addressed by accessible name rather than visible text.
   it('invokes onClose when the close button is clicked', () => {
     const onClose = jest.fn();
     renderMap(onClose);
 
-    fireEvent.click(screen.getByText('Close Map'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close map' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('starts with the recenter button disabled (camera is auto-following)', () => {
+  it('starts with the reset-view button disabled (camera is auto-fitting)', () => {
     renderMap();
-    expect(screen.getByText('Recenter')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reset view' })).toBeDisabled();
+  });
+
+  it('toggles follow-vessel mode, which also enables reset view', () => {
+    renderMap();
+
+    const follow = screen.getByRole('button', { name: 'Follow vessel' });
+    fireEvent.click(follow);
+
+    // Label flips to the "stop" affordance, and leaving 'auto' makes reset meaningful.
+    expect(screen.getByRole('button', { name: 'Stop following vessel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reset view' })).toBeEnabled();
+
+    // Toggling back off drops to a frozen manual view, NOT back to auto — so reset
+    // stays available rather than silently snapping the user's view away.
+    fireEvent.click(screen.getByRole('button', { name: 'Stop following vessel' }));
+    expect(screen.getByRole('button', { name: 'Follow vessel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reset view' })).toBeEnabled();
+  });
+
+  it('resets back to the auto-fit camera', () => {
+    renderMap();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Follow vessel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset view' }));
+
+    expect(screen.getByRole('button', { name: 'Reset view' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Follow vessel' })).toBeInTheDocument();
   });
 });

@@ -47,11 +47,13 @@ export default function Speedometer() {
 		// always renders as a consistent square regardless of what size/shape the
 		// parent gives it, and container query units (cqw) size the text off the
 		// tile's own rendered width so "12.34" never overflows or looks stretched.
+		// min width and max width keep the tile from getting too small or too large
 		<Box
 			sx={{
 				containerType: "inline-size",
 				width: "100%",
 				maxWidth: "8rem",
+				minWidth: "4rem",
 				aspectRatio: "1 / 1",
 				borderRadius: 2,
 				backgroundColor: theme.palette.telemetry?.background.primary,

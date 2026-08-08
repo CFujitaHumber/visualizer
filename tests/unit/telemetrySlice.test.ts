@@ -72,27 +72,20 @@ describe('telemetrySlice', () => {
     position: { x: 5, y: 0, z: 0 }, // 5m to the vessel's right
   };
 
-  it('setZedObjects projects boat-relative positions into world frame (identity heading)', () => {
+  // The slice deliberately does NOT project any more — it stores exactly what the
+  // basestation sent. World-frame projection lives in selectZedObjectsWorld, which is
+  // covered in telemetrySelectors.test.ts. See the frame note in statusTypes.ts.
+  it('setZedObjects stores boat-relative positions unchanged', () => {
     let state = reducer(undefined, { type: '@@INIT' });
+    state = reducer(state, setASVHeading(90));
     state = reducer(state, SET_STATUS({ zed: { ...state.zed, odom: { ...state.zed.odom, position: { x: 10, y: 20, z: 0 } } } }));
-    // heading 0 — rotation is identity, projection is a plain translate by the anchor
     state = reducer(state, setZedObjects([boatRelativeObject]));
 
-    expect(state.zed.objects[0]!.position).toEqual({ x: 15, y: 20, z: 0 });
+    expect(state.zed.objects[0]!.position).toEqual({ x: 5, y: 0, z: 0 });
     expect(state.zed.objects[0]!.label).toBe('Nav Green');
   });
 
-  it('setZedObjects rotates boat-relative positions by the current heading', () => {
-    let state = reducer(undefined, { type: '@@INIT' });
-    state = reducer(state, setASVHeading(90)); // facing east
-    state = reducer(state, SET_STATUS({ zed: { ...state.zed, odom: { ...state.zed.odom, position: { x: 10, y: 20, z: 0 } } } }));
-    state = reducer(state, setZedObjects([boatRelativeObject]));
-
-    // 5m to the right of a boat facing east lands south of it: x unchanged, y - 5
-    expect(state.zed.objects[0]!.position).toEqual({ x: 10, y: 15, z: 0 });
-  });
-
-  it('FETCH_TELEMETRY_SUCCESS projects incoming zed.objects using that same frame', () => {
+  it('FETCH_TELEMETRY_SUCCESS stores incoming zed.objects unchanged', () => {
     const incoming: Status = {
       ...InitialStatus,
       asv: { ...InitialStatus.asv, heading: 90 },
@@ -104,7 +97,76 @@ describe('telemetrySlice', () => {
     };
     const state = reducer(undefined, { type: FETCH_TELEMETRY_SUCCESS, payload: incoming });
 
-    expect(state.zed.objects[0]!.position).toEqual({ x: 10, y: 15, z: 0 });
+    expect(state.zed.objects[0]!.position).toEqual({ x: 5, y: 0, z: 0 });
+  });
+
+  it('latches the frame origin on the first non-zero fix and then holds it', () => {
+    let state = reducer(undefined, { type: '@@INIT' });
+    expect(state.frame.hasOrigin).toBe(false);
+
+    // (0,0) is the pre-fix placeholder and must not anchor the frame.
+    state = reducer(state, SET_STATUS({ asv: { ...state.asv, latitude: 0, longitude: 0 } }));
+    expect(state.frame.hasOrigin).toBe(false);
+
+    state = reducer(state, SET_STATUS({ asv: { ...state.asv, latitude: 43.66, longitude: -79.53 } }));
+    expect(state.frame).toEqual({ originLatitude: 43.66, originLongitude: -79.53, hasOrigin: true });
+
+    // Subsequent fixes move the vessel, not the origin.
+    state = reducer(state, SET_STATUS({ asv: { ...state.asv, latitude: 43.67, longitude: -79.54 } }));
+    expect(state.frame.originLatitude).toBe(43.66);
+  });
+
+  it('does not let the wire wipe the client-built course trail', () => {
+    let state = reducer(undefined, { type: '@@INIT' });
+    state = reducer(state, appendCourseTrailPoint({ x: 1, y: 2, heading: 30 }));
+    state = reducer(state, appendCourseTrailPoint({ x: 3, y: 4, heading: 35 }));
+
+    // Every basestation payload carries `courseTrail: []` because its default state
+    // declares the key — honouring that used to clear the trail ~7x/second.
+    state = reducer(state, { type: FETCH_TELEMETRY_SUCCESS, payload: InitialStatus });
+    expect(state.map.courseTrail).toHaveLength(2);
+
+    state = reducer(state, SET_STATUS({ map: { ...InitialStatus.map, courseTrail: [] } }));
+    expect(state.map.courseTrail).toHaveLength(2);
+  });
+
+  it('preserves sub-object identity when a payload re-broadcasts unchanged values', () => {
+    let state = reducer(undefined, { type: FETCH_TELEMETRY_SUCCESS, payload: InitialStatus });
+    const asvBefore = state.asv;
+    const zedBefore = state.zed;
+
+    // Same content, fresh objects — what every re-parsed websocket frame looks like.
+    const reparsed = JSON.parse(JSON.stringify(InitialStatus)) as Status;
+    state = reducer(state, { type: FETCH_TELEMETRY_SUCCESS, payload: reparsed });
+
+    expect(state.asv).toBe(asvBefore);
+    expect(state.zed).toBe(zedBefore);
+
+    // A real change still lands, and only on the group that changed.
+    state = reducer(state, { type: FETCH_TELEMETRY_SUCCESS, payload: { ...reparsed, asv: { ...reparsed.asv, speed: 2.5 } } });
+    expect(state.asv).not.toBe(asvBefore);
+    expect(state.asv.speed).toBe(2.5);
+    expect(state.zed).toBe(zedBefore);
+  });
+
+  it('keeps grid array identity when an unchanged grid is re-broadcast', () => {
+    const grid = [[{ type: 1, x: 0, y: 0, z: 0 }], [{ type: 0, x: 0, y: 1, z: 0 }]] as Status['map']['occupancyGrid'];
+    const payload: Status = { ...InitialStatus, map: { ...InitialStatus.map, occupancyGrid: grid } };
+
+    let state = reducer(undefined, { type: FETCH_TELEMETRY_SUCCESS, payload });
+    const first = state.map.occupancyGrid;
+
+    // Same content, fresh objects — exactly what a re-parsed websocket frame looks like.
+    const reparsed = JSON.parse(JSON.stringify(grid)) as Status['map']['occupancyGrid'];
+    state = reducer(state, { type: FETCH_TELEMETRY_SUCCESS, payload: { ...payload, map: { ...payload.map, occupancyGrid: reparsed } } });
+    expect(state.map.occupancyGrid).toBe(first);
+
+    // A real change must still land.
+    const changed = JSON.parse(JSON.stringify(grid)) as Status['map']['occupancyGrid'];
+    changed[0]![0]!.type = 4;
+    state = reducer(state, { type: FETCH_TELEMETRY_SUCCESS, payload: { ...payload, map: { ...payload.map, occupancyGrid: changed } } });
+    expect(state.map.occupancyGrid).not.toBe(first);
+    expect(state.map.occupancyGrid[0]![0]!.type).toBe(4);
   });
 
   it('setSystemTopics replaces the topic list', () => {

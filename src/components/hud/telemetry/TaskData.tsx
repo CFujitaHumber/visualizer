@@ -45,7 +45,7 @@ function DataRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function TaskData() {
-	const theme = useTheme();
+	const theme = useTheme();	
 	const taskData = useSelector((state: RootState) => state.telemetry.task.data);
 	const zed = useSelector((state: RootState) => state.telemetry.zed);
 	const topics = useSelector((state: RootState) => state.telemetry.system.topics);
@@ -78,10 +78,10 @@ export default function TaskData() {
 				display: "flex",
 				flexDirection: "column",
 				gap: "6px",
-				minHeight: "120px",
-				overflowY: "auto",
+				overflow: "hidden",
 			}}
 		>
+			<Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
 			<Typography
 				variant="caption"
 				sx={{ fontWeight: "bold", color: theme.palette.telemetry?.text.primary, fontSize: "10px", textTransform: "uppercase" }}
@@ -162,6 +162,7 @@ export default function TaskData() {
 					</Typography>
 				))
 			)}
+		</Box>
 		</Box>
 	);
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useTheme, alpha } from '@mui/material/styles';
 import type { RootState } from '../../../store/store';
 import { useAppSelector } from '../../../store';
+import { selectVesselLocalMeters, selectZedObjectsWorld } from '../../../store/selectors/telemetrySelectors';
 import { catamaranSvgStr } from '../../../assets/svgSources';
 import {
   ROBOT_LENGTH_M,
@@ -23,8 +24,10 @@ export const BigMap: React.FC = () => {
   // renders them elsewhere, and the basestation has no live publisher for either
   // yet (see the `map` group in statusTypes.ts) — BigMap shows a lightweight
   // procedural grid plus the swept-area wedge below instead.
-  const ZedObjects = useAppSelector((state: RootState) => state.telemetry.zed.objects);
-  const odom = useAppSelector((state: RootState) => state.telemetry.zed.odom.position);
+  // Same shared local-meters frame TacticalMap and the course trail use — see
+  // selectVesselLocalMeters for why this isn't zed.odom.position.
+  const ZedObjects = useAppSelector(selectZedObjectsWorld);
+  const odom = useAppSelector(selectVesselLocalMeters);
   const headingASV = useAppSelector((state: RootState) => state.telemetry.asv.heading);
   const pathASV = useAppSelector((state: RootState) => state.telemetry.map.courseTrail);
 
