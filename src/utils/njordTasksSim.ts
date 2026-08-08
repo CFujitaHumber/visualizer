@@ -16,6 +16,20 @@ const MAX_TURN_RATE = 30; // deg/sec
 // --- Map Constraints ---
 const MAP_BOUNDS = { minX: -200, maxX: 400, minY: -100, maxY: 400 };
 
+// Mirrors Base-Station-Flask's ros2_bridge.get_available_topics() so the demo
+// exercises TaskData's "Services / Topics" section without a live bridge.
+const MOCK_TOPICS = [
+    "phone",
+    "task",
+    "/asv/joint_states",
+    "zed/zed_node/odom",
+    "/zed/zed_node/rgb/color/rect/image",
+    "battery_status/prop_l",
+    "battery_status/prop_r",
+    "battery_status/main",
+    "zed/obj_det/objects",
+];
+
 export const njordTasks = [
     "Calibration", // 0
     "Navigation Channel", // 1
@@ -199,7 +213,8 @@ export function generateRandomState(): Status {
             odom: { position: { x: 0, y: 0, z: 0 }, orientation: { roll: 0, pitch: 0, yaw: 0 } },
             objects: [],
             camera: { active: false, width: 0, height: 0, encoding: "" }
-        }
+        },
+        system: { topics: MOCK_TOPICS },
     };
 }
 

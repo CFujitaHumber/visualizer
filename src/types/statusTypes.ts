@@ -9,6 +9,7 @@
  */
 import type { Path, Grid } from "react-isometric-engine";
 import type { TaskData, TaskLocation, TaskStatus } from "./taskTypes";
+import { TaskValues } from "./taskTypes";
 import type { DetectedObject } from "./detectedObjectsTypes";
 
 type CourseTrailPoint = {
@@ -37,8 +38,15 @@ type Zed = {
 
 type Status = {
     map: {
+        // No basestation publisher exists yet for either grid (confirmed: no OccupancyGrid/
+        // costmap subscriber anywhere in Base-Station-Flask) — these stay at their empty
+        // InitialStatus default until the bridge subscribes to SLAM Toolbox's /map (the
+        // ASV side has moved off nav2/ros2_control onto SLAM Toolbox for mapping).
+        // Consumers should render conditionally on non-empty data, as Map.tsx already does.
         occupancyGrid: Grid;
         navigationGrid: Grid;
+        // The basestation doesn't send this either — built client-side instead, in
+        // TacticalMapPanel, from live zed.odom.position + asv.heading.
         courseTrail: CourseTrailPoint[];
     };
     planning: {
@@ -72,6 +80,10 @@ type Status = {
         strength: number;
     };
     zed: Zed;
+    system: {
+        /** Names of the ROS2 topics/services the basestation bridge subscribes to. */
+        topics: string[];
+    };
 }
     
 const InitialStatus: Status = {
@@ -81,7 +93,7 @@ const InitialStatus: Status = {
         courseTrail: [],
     },
     planning: {
-        status: "idle",
+        status: TaskValues.standby,
         course: [],
         plan: []
     },
@@ -123,7 +135,18 @@ const InitialStatus: Status = {
             encoding: "",
         },
     },
+    system: {
+        topics: [],
+    },
 };
+
+// zed.objects[] positions arrive boat-relative (x = right, y = forward) from the
+// basestation — the bridge has no TF2/GPS fusion, so it can't transform them itself.
+// The frontend projects them into the same world frame zed.odom.position is expressed
+// in (using asv.heading + zed.odom.position as the rotation/anchor) at ingestion time,
+// in telemetrySlice's setZedObjects and FETCH_TELEMETRY_SUCCESS reducers — see those
+// for the actual transform. zed.odom.{position,orientation} themselves are the ZED's
+// own local visual-odometry frame and are used as-is (not fused with GPS/compass).
 
 export type { Status, CourseTrailPoint, Zed, ZedPosition, ZedOrientation };
 export { InitialStatus };

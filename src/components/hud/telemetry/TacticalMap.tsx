@@ -6,75 +6,47 @@
  * smooth camera pan/zoom.
  *
  * @remarks
- * - Presentational component: all tracking state (path history, obstacles,
- *   current position, heading) is supplied as refs so the render loop can
- *   read it every animation frame without triggering React re-renders. The
- *   Redux-connected wrapper {@link TacticalMapPanel} owns and updates those
- *   refs from live telemetry.
+ * - Reads path history, obstacles, position, and heading directly from Redux
+ *   (the same `state.telemetry.*` selectors BigMap uses) rather than via
+ *   props/refs. The only remaining Redux-connected wrapper work is building
+ *   the course trail itself — see {@link TacticalMapPanel}.
  * - The canvas render loop runs on `requestAnimationFrame`, independent of
- *   React's render cycle, with exponential smoothing for position/heading
- *   and for camera pan/zoom, plus a "teleport" snap heuristic so an initial
- *   GPS fix (or a large jump) doesn't glide in from the wrong place.
+ *   React's render cycle. Since the effect that starts it only runs once on
+ *   mount, live selector values are mirrored into refs (see the `*Ref`
+ *   variables below) so each animation frame reads current state instead of
+ *   whatever was captured in the effect's closure at mount time.
+ * - Exponential smoothing is applied to position/heading and to camera
+ *   pan/zoom, plus a "teleport" snap heuristic so an initial GPS fix (or a
+ *   large jump) doesn't glide in from the wrong place.
  * - All colors come from the active MUI theme (telemetry palette group),
  *   with graceful fallbacks to the core MUI palette when it isn't defined.
  *
  * @author Carson Fujita
  * @license MIT
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Box, Typography, Button } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
+import { useAppSelector } from '../../../store';
+import type { RootState } from '../../../store';
+import type { CourseTrailPoint, DetectedObject } from "../../../types";
+import { catamaranSvgStr } from '../../../assets/svgSources';
+import {
+    ROBOT_LENGTH_M,
+    ROBOT_WIDTH_M,
+    FOV_RADIUS_M,
+    FOV_HALF_ANGLE_RAD,
+    OBJECT_COLOR_KEYS,
+    DEFAULT_OBJECT_COLOR_KEY,
+} from '../../../utils/robot';
 
-/** A single recorded path point, in local map meters, with heading at that point. */
-export interface TacticalMapPathPoint {
-    x: number;
-    y: number;
-    /** Heading in degrees (0 = North, clockwise) at the time this point was recorded. */
-    h: number;
-}
-
-/** An obstacle plotted on the tactical map, in local map meters. */
-export interface TacticalMapObstacle {
-    /** Stable identity for the obstacle. */
-    id: string;
-    x: number;
-    y: number;
-    /** Physical radius in meters (not currently used for the on-screen marker size). */
-    r: number;
-}
 
 /** Properties for the {@link TacticalMap} component. */
 export interface TacticalMapProps {
     /** Invoked when the user dismisses the map. */
     onClose: () => void;
-    /** Accumulated vessel path, in local map meters. Read every animation frame. */
-    pathHistory: React.RefObject<TacticalMapPathPoint[]>;
-    /** Accumulated obstacles, in local map meters. Read every animation frame. */
-    obstacles: React.RefObject<TacticalMapObstacle[]>;
-    /** Current vessel position, in local map meters. Read every animation frame. */
-    currentPos: React.RefObject<{ x: number; y: number }>;
-    /** Current vessel heading in degrees (0 = North, clockwise). Read every animation frame. */
-    headingRef: React.RefObject<number>;
 }
-
-// SVG catamaran data URL for drawing the boat icon on the canvas.
-const catamaranSvgStr = `
-<svg xmlns="http://www.w3.org/2000/svg" width="70" height="95" viewBox="0 0 80 110">
-  <path d="M 16 5 C 10 5, 8 20, 8 45 C 8 70, 8 85, 12 90 C 14 93, 18 93, 20 90 C 22 85, 22 75, 22 65 L 22 25 C 22 15, 20 5, 16 5 Z" fill="#00435C" stroke="#B980F1" strokeWidth="1" />
-  <path d="M 64 5 C 70 5, 72 20, 72 45 C 72 70, 72 85, 68 90 C 66 93, 62 93, 60 90 C 58 85, 58 75, 58 65 L 58 25 C 58 15, 60 5, 64 5 Z" fill="#00435C" stroke="#B980F1" strokeWidth="1" />
-  <rect x="21" y="20" width="38" height="4" fill="#080721" stroke="#D9D9D9" strokeWidth="1" />
-  <rect x="21" y="70" width="38" height="4" fill="#080721" stroke="#D9D9D9" strokeWidth="1" />
-  <path d="M 26 24 C 23 35, 23 60, 26 70" fill="none" stroke="#D9D9D9" strokeWidth="1.5" />
-  <path d="M 54 24 C 57 35, 57 60, 54 70" fill="none" stroke="#D9D9D9" strokeWidth="1.5" />
-  <path d="M 28 32 C 26 45, 26 50, 28 62 L 52 62 C 54 50, 54 45, 52 32 Z" fill="#080721" stroke="#D9D9D9" strokeWidth="1.5" />
-  <rect x="33" y="38" width="14" height="18" rx="2" fill="none" stroke="#B980F1" strokeWidth="1" />
-  <circle cx="35" cy="40" r="1" fill="#D8FA07" />
-  <circle cx="45" cy="40" r="1" fill="#D8FA07" />
-  <circle cx="35" cy="54" r="1" fill="#D8FA07" />
-  <circle cx="45" cy="54" r="1" fill="#D8FA07" />
-</svg>
-`;
 
 const slideUpExpand = keyframes`
   0% { transform: scale(0.15); opacity: 0; border-radius: 20px; }
@@ -86,15 +58,39 @@ const pulseDot = keyframes`
   50% { opacity: 0.5; transform: scale(0.8); }
 `;
 
+/** Fixed on-screen boat-icon height (px), independent of zoom. Width is derived from the real hull's aspect ratio. */
+const BOAT_ICON_H_PX = 88;
+const BOAT_ICON_W_PX = BOAT_ICON_H_PX * (ROBOT_WIDTH_M / ROBOT_LENGTH_M);
+
+type CameraMode = 'auto' | 'manual';
+
+/** Manual zoom bounds, in canvas px per world meter. */
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 200;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
 /**
  * @function TacticalMap
  * @description Full-screen canvas map showing the vessel's accumulated path,
  * swept field-of-view, obstacles, and current position/heading.
  */
-export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, obstacles, currentPos, headingRef }) => {
+export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
     const theme = useTheme();
     const telemetry = theme.palette.telemetry;
+    const RADIUS = 0.5; // Fixed radius for detected obstacles in meters
 
+    // occupancyGrid isn't read here: Map.tsx's MapComponent already renders it
+    // elsewhere, and the basestation has no live publisher for it yet (see the
+    // `map` group in statusTypes.ts).
+    const ZedObjects = useAppSelector((state: RootState) => state.telemetry.zed.objects);
+    const odom = useAppSelector((state: RootState) => state.telemetry.zed.odom.position);
+    // zed.odom.orientation isn't used for the boat icon's rotation — asv.heading
+    // (compass heading) is used instead, consistently with BigMap and the course trail.
+    const headingASV = useAppSelector((state:RootState) => state.telemetry.asv.heading);
+    const pathASV = useAppSelector((state: RootState) => state.telemetry.map.courseTrail);
+
+    //  Colors
     const bgDefault = theme.palette.background.default;
     const headerBg = alpha(theme.palette.background.paper, 0.95);
     const borderLight = telemetry?.border.light ?? theme.palette.divider;
@@ -110,13 +106,138 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const boatImgRef = useRef<HTMLImageElement | null>(null);
 
+    // Camera: 'auto' continuously re-fits to the trail/obstacle extent (the
+    // existing lerp-toward-bbox behavior below); 'manual' is driven directly by
+    // the pinch/pan/wheel handlers further down. Both read/write the same
+    // cameraRef, so the render loop doesn't care which is currently steering —
+    // it either lerps cameraRef toward the auto-fit target, or leaves it alone
+    // for gestures to have mutated directly.
+    const cameraRef = useRef({ scale: 0, centerX: 0, centerY: 0 });
+    const [cameraMode, setCameraMode] = useState<CameraMode>('auto');
+    const cameraModeRef = useRef(cameraMode);
+    useEffect(() => { cameraModeRef.current = cameraMode; }, [cameraMode]);
+
+    // Active pointers for pinch-to-zoom (2) vs. drag-to-pan (1).
+    const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+    const dragStartRef = useRef<{ x: number; y: number; centerX: number; centerY: number } | null>(null);
+    const pinchStartRef = useRef<{ distance: number; scale: number; midX: number; midY: number; worldX: number; worldY: number } | null>(null);
+
+    const recenter = () => setCameraMode('auto');
+
+    const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        setCameraMode('manual');
+
+        if (pointersRef.current.size === 2) {
+            dragStartRef.current = null;
+            const [a, b] = Array.from(pointersRef.current.values());
+            const distance = Math.hypot(b.x - a.x, b.y - a.y);
+            const midX = (a.x + b.x) / 2;
+            const midY = (a.y + b.y) / 2;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const { scale, centerX, centerY } = cameraRef.current;
+            const worldX = centerX + (midX - rect.left - rect.width / 2) / scale;
+            const worldY = centerY - (midY - rect.top - rect.height / 2) / scale;
+            pinchStartRef.current = { distance, scale, midX, midY, worldX, worldY };
+        } else if (pointersRef.current.size === 1) {
+            pinchStartRef.current = null;
+            dragStartRef.current = {
+                x: event.clientX,
+                y: event.clientY,
+                centerX: cameraRef.current.centerX,
+                centerY: cameraRef.current.centerY,
+            };
+        }
+    };
+
+    const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+        if (!pointersRef.current.has(event.pointerId)) return;
+        pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+        if (pointersRef.current.size === 2) {
+            const pinchStart = pinchStartRef.current;
+            if (!pinchStart || pinchStart.distance < 1) return;
+            const [a, b] = Array.from(pointersRef.current.values());
+            const distance = Math.hypot(b.x - a.x, b.y - a.y);
+            const nextScale = clamp(pinchStart.scale * (distance / pinchStart.distance), MIN_SCALE, MAX_SCALE);
+            const rect = event.currentTarget.getBoundingClientRect();
+            cameraRef.current.scale = nextScale;
+            cameraRef.current.centerX = pinchStart.worldX - (pinchStart.midX - rect.left - rect.width / 2) / nextScale;
+            cameraRef.current.centerY = pinchStart.worldY + (pinchStart.midY - rect.top - rect.height / 2) / nextScale;
+            return;
+        }
+
+        const dragStart = dragStartRef.current;
+        if (!dragStart) return;
+        const dxPx = event.clientX - dragStart.x;
+        const dyPx = event.clientY - dragStart.y;
+        const { scale } = cameraRef.current;
+        cameraRef.current.centerX = dragStart.centerX - dxPx / scale;
+        cameraRef.current.centerY = dragStart.centerY + dyPx / scale;
+    };
+
+    const endPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
+        pointersRef.current.delete(event.pointerId);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        pinchStartRef.current = null;
+        if (pointersRef.current.size === 1) {
+            const [[, pos]] = Array.from(pointersRef.current.entries());
+            dragStartRef.current = {
+                x: pos.x,
+                y: pos.y,
+                centerX: cameraRef.current.centerX,
+                centerY: cameraRef.current.centerY,
+            };
+        } else {
+            dragStartRef.current = null;
+        }
+    };
+
+    const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
+        event.preventDefault();
+        setCameraMode('manual');
+        const rect = event.currentTarget.getBoundingClientRect();
+        const { scale, centerX, centerY } = cameraRef.current;
+        const px = event.clientX - rect.left - rect.width / 2;
+        const py = event.clientY - rect.top - rect.height / 2;
+        const worldX = centerX + px / scale;
+        const worldY = centerY - py / scale;
+        const nextScale = clamp(scale * Math.exp(-event.deltaY * 0.001), MIN_SCALE, MAX_SCALE);
+        cameraRef.current.scale = nextScale;
+        cameraRef.current.centerX = worldX - px / nextScale;
+        cameraRef.current.centerY = worldY + py / nextScale;
+    };
+
+    // Mirrored into refs so the rAF render loop below (started once on mount)
+    // always reads live Redux state and the live theme instead of the values
+    // captured in its closure at first render.
+    const zedObjectsRef = useRef(ZedObjects);
+    const odomRef = useRef(odom);
+    const headingRef = useRef(headingASV);
+    const pathRef = useRef(pathASV);
+    const themeRef = useRef(theme);
+    useEffect(() => {
+        zedObjectsRef.current = ZedObjects;
+        odomRef.current = odom;
+        headingRef.current = headingASV;
+        pathRef.current = pathASV;
+        themeRef.current = theme;
+    }, [ZedObjects, odom, headingASV, pathASV, theme]);
+
     useEffect(() => {
         const img = new Image();
         img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(catamaranSvgStr);
         img.onload = () => { boatImgRef.current = img; };
     }, []);
 
-    // Render loop
+    // Render loop. This is very similar to BigMap's render loop — both read live
+    // state via refs and share the same lerp/teleport-snap approach — but this
+    // one uses a bbox-fit camera (pans+zooms to keep the whole trail/obstacle
+    // extent in frame) instead of BigMap's deadzone-pan/max-zoom camera, so
+    // they aren't easily unified into one hook.
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -125,15 +246,17 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
 
         let animationFrameId: number;
 
-        let smoothX = currentPos.current.x;
-        let smoothY = currentPos.current.y;
+        let smoothX = odomRef.current.x;
+        let smoothY = odomRef.current.y;
         let smoothHeading = headingRef.current;
 
-        let smoothScale = 0;
-        let smoothCX = 0;
-        let smoothCY = 0;
-
         const render = () => {
+            const ZedObjects = zedObjectsRef.current;
+            const odom = odomRef.current;
+            const headingASV = headingRef.current;
+            const pathASV = pathRef.current;
+            const objectColors = themeRef.current.palette.telemetry?.objects;
+
             const rect = canvas.parentElement?.getBoundingClientRect();
             if (rect && (canvas.width !== rect.width || canvas.height !== rect.height)) {
                 canvas.width = rect.width;
@@ -145,9 +268,9 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
                 return;
             }
 
-            const targetX = currentPos.current.x;
-            const targetY = currentPos.current.y;
-            const targetH = headingRef.current;
+            const targetX = odom.x;
+            const targetY = odom.y;
+            const targetH = headingASV;
 
             // Detect teleport (e.g. initial connection) and snap instead of lerping
             if (Math.hypot(targetX - smoothX, targetY - smoothY) > 50) {
@@ -181,17 +304,17 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
             let minY = currentY;
             let maxY = currentY;
 
-            pathHistory.current.forEach(pt => {
-                minX = Math.min(minX, pt.x - 40); // 40m cone radius padding
-                maxX = Math.max(maxX, pt.x + 40);
-                minY = Math.min(minY, pt.y - 40);
-                maxY = Math.max(maxY, pt.y + 40);
+            pathASV.forEach((pt: CourseTrailPoint) => {
+                minX = Math.min(minX, pt.x - FOV_RADIUS_M);
+                maxX = Math.max(maxX, pt.x + FOV_RADIUS_M);
+                minY = Math.min(minY, pt.y - FOV_RADIUS_M);
+                maxY = Math.max(maxY, pt.y + FOV_RADIUS_M);
             });
-            obstacles.current.forEach(obs => {
-                minX = Math.min(minX, obs.x - obs.r);
-                maxX = Math.max(maxX, obs.x + obs.r);
-                minY = Math.min(minY, obs.y - obs.r);
-                maxY = Math.max(maxY, obs.y + obs.r);
+            ZedObjects.forEach((obs: DetectedObject) => {
+                minX = Math.min(minX, obs.position.x - RADIUS);
+                maxX = Math.max(maxX, obs.position.x + RADIUS);
+                minY = Math.min(minY, obs.position.y - RADIUS);
+                maxY = Math.max(maxY, obs.position.y + RADIUS);
             });
 
             // Lazy scaling: allow moving inside a minimum 50x50m viewport.
@@ -220,19 +343,25 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
             const targetCX = (minX + maxX) / 2;
             const targetCY = (minY + maxY) / 2;
 
-            if (smoothScale === 0) {
-                smoothScale = targetScale;
-                smoothCX = targetCX;
-                smoothCY = targetCY;
-            } else {
-                smoothScale += (targetScale - smoothScale) * 0.1;
-                smoothCX += (targetCX - smoothCX) * 0.1;
-                smoothCY += (targetCY - smoothCY) * 0.1;
+            // 'auto' continuously lerps toward the bbox-fit target computed above.
+            // 'manual' leaves the camera alone — pointer/wheel handlers already
+            // wrote directly into cameraRef in response to the user's gesture.
+            if (cameraModeRef.current === 'auto') {
+                const camera = cameraRef.current;
+                if (camera.scale === 0) {
+                    camera.scale = targetScale;
+                    camera.centerX = targetCX;
+                    camera.centerY = targetCY;
+                } else {
+                    camera.scale += (targetScale - camera.scale) * 0.1;
+                    camera.centerX += (targetCX - camera.centerX) * 0.1;
+                    camera.centerY += (targetCY - camera.centerY) * 0.1;
+                }
             }
 
-            const scale = smoothScale;
-            const centerX = smoothCX;
-            const centerY = smoothCY;
+            const scale = cameraRef.current.scale || 1;
+            const centerX = cameraRef.current.centerX;
+            const centerY = cameraRef.current.centerY;
 
             ctx.save();
             ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -273,25 +402,29 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
             // Mapped area: the exact area swept by the FOV cone over time, as a single-path wedge fill.
             ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
             ctx.beginPath();
-            pathHistory.current.forEach(pt => {
-                const sweptConeAngle = Math.PI / 2 - (pt.h * Math.PI) / 180;
+            pathASV.forEach((pt: CourseTrailPoint) => {
+                const sweptConeAngle = Math.PI / 2 - (pt.heading * Math.PI) / 180;
                 ctx.moveTo(pt.x, pt.y);
-                ctx.arc(pt.x, pt.y, 40, sweptConeAngle - Math.PI / 6, sweptConeAngle + Math.PI / 6);
+                ctx.arc(pt.x, pt.y, FOV_RADIUS_M, sweptConeAngle - FOV_HALF_ANGLE_RAD, sweptConeAngle + FOV_HALF_ANGLE_RAD);
+                ctx.lineTo(pt.x, pt.y);
             });
             // Also draw the wedge at the current smooth position so it connects to the boat.
             const currentConeAngle = Math.PI / 2 - (smoothHeading * Math.PI) / 180;
             ctx.moveTo(smoothX, smoothY);
-            ctx.arc(smoothX, smoothY, 40, currentConeAngle - Math.PI / 6, currentConeAngle + Math.PI / 6);
+            ctx.arc(smoothX, smoothY, FOV_RADIUS_M, currentConeAngle - FOV_HALF_ANGLE_RAD, currentConeAngle + FOV_HALF_ANGLE_RAD);
+            ctx.lineTo(smoothX, smoothY);
             ctx.fill();
 
-            // Mapped obstacles (uniform circles)
-            ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
-            ctx.strokeStyle = '#ef4444';
+            // Mapped obstacles, colored per label (same mapping as BigMap).
             ctx.lineWidth = 1 / scale;
-            obstacles.current.forEach(obs => {
+            ZedObjects.forEach((obs: DetectedObject) => {
+                const colorKey = OBJECT_COLOR_KEYS[obs.label] ?? DEFAULT_OBJECT_COLOR_KEY;
+                const stroke = objectColors?.[colorKey as keyof typeof objectColors] ?? '#ef4444';
+                ctx.fillStyle = alpha(stroke, 0.2);
+                ctx.strokeStyle = stroke;
                 ctx.beginPath();
                 // Fixed 8px diameter visually regardless of zoom scale.
-                ctx.arc(obs.x, obs.y, 4 / scale, 0, Math.PI * 2);
+                ctx.arc(obs.position.x, obs.position.y, 4 / scale, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
             });
@@ -308,12 +441,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
             ctx.fillStyle = 'rgba(16, 185, 129, 0.1)';
             ctx.beginPath();
             ctx.moveTo(0, 0);
-            ctx.arc(0, 0, 40, coneAngle - Math.PI / 6, coneAngle + Math.PI / 6);
+            ctx.arc(0, 0, FOV_RADIUS_M, coneAngle - FOV_HALF_ANGLE_RAD, coneAngle + FOV_HALF_ANGLE_RAD);
             ctx.lineTo(0, 0);
             ctx.fill();
             ctx.restore();
 
-            // Boat icon (always rendered at a fixed screen size, aligned with heading)
+            // Boat icon (always rendered at a fixed screen size — see BOAT_ICON_*_PX
+            // above, matching the real hull's aspect ratio — aligned with heading)
             if (boatImgRef.current) {
                 ctx.save();
                 ctx.translate(currentX, currentY);
@@ -321,9 +455,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
                 ctx.scale(1 / scale, -1 / scale);
                 // Standard canvas rotation is clockwise; heading is clockwise.
                 ctx.rotate((heading * Math.PI) / 180);
-                const boatW = 64;
-                const boatH = 88;
-                ctx.drawImage(boatImgRef.current, -boatW / 2, -boatH / 2, boatW, boatH);
+                ctx.drawImage(boatImgRef.current, -BOAT_ICON_W_PX / 2, -BOAT_ICON_H_PX / 2, BOAT_ICON_W_PX, BOAT_ICON_H_PX);
                 ctx.restore();
             }
 
@@ -337,7 +469,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
         return () => {
             cancelAnimationFrame(animationFrameId);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Live state comes from the refs mirrored above — the render loop only needs to (re)start on mount.
     }, []);
 
     return (
@@ -411,28 +543,61 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose, pathHistory, 
                         LOCAL SLAM COORDINATES
                     </Box>
                 </Box>
-                <Button
-                    onClick={onClose}
-                    sx={{
-                        color: textSecondary,
-                        backgroundColor: badgeBg,
-                        border: `1px solid ${borderLight}`,
-                        padding: '8px 16px',
-                        borderRadius: '6px',
-                        fontWeight: 'bold',
-                        '&:hover': {
-                            backgroundColor: accent,
-                            color: bgDefault,
-                        },
-                    }}
-                >
-                    Close Map
-                </Button>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Button
+                        onClick={recenter}
+                        disabled={cameraMode === 'auto'}
+                        sx={{
+                            color: textSecondary,
+                            backgroundColor: badgeBg,
+                            border: `1px solid ${borderLight}`,
+                            padding: '8px 16px',
+                            borderRadius: '6px',
+                            fontWeight: 'bold',
+                            '&:hover': {
+                                backgroundColor: accent,
+                                color: bgDefault,
+                            },
+                            '&.Mui-disabled': {
+                                color: textSecondary,
+                                opacity: 0.4,
+                            },
+                        }}
+                    >
+                        Recenter
+                    </Button>
+                    <Button
+                        onClick={onClose}
+                        sx={{
+                            color: textSecondary,
+                            backgroundColor: badgeBg,
+                            border: `1px solid ${borderLight}`,
+                            padding: '8px 16px',
+                            borderRadius: '6px',
+                            fontWeight: 'bold',
+                            '&:hover': {
+                                backgroundColor: accent,
+                                color: bgDefault,
+                            },
+                        }}
+                    >
+                        Close Map
+                    </Button>
+                </Box>
             </Box>
 
             {/* 2D canvas */}
-            <Box sx={{ flex: 1, position: 'relative', cursor: 'crosshair', overflow: 'hidden' }}>
-                <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'block' }} />
+            <Box sx={{ flex: 1, position: 'relative', cursor: 'grab', overflow: 'hidden' }}>
+                <canvas
+                    ref={canvasRef}
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={endPointer}
+                    onPointerCancel={endPointer}
+                    onPointerLeave={endPointer}
+                    onWheel={handleWheel}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
+                />
 
                 {/* Legend */}
                 <Box

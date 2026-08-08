@@ -23,6 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+
 import { useSelector } from "react-redux";
 import type { RootState } from "../../../store/store";
 import { Box, Typography } from "@mui/material";
@@ -40,19 +41,25 @@ export default function Speedometer() {
 	};
 
 	return (
+		// A fixed width paired with a parent-driven height (the old "width: 8rem,
+		// height: 100%") stretches into whatever aspect ratio the consumer's grid
+		// cell happens to have. Owning a stable aspectRatio instead means this tile
+		// always renders as a consistent square regardless of what size/shape the
+		// parent gives it, and container query units (cqw) size the text off the
+		// tile's own rendered width so "12.34" never overflows or looks stretched.
 		<Box
 			sx={{
-				// Width is 5 characters 
-				width: "8rem",
+				containerType: "inline-size",
+				width: "100%",
+				maxWidth: "8rem",
+				aspectRatio: "1 / 1",
 				borderRadius: 2,
-				height: "100%",
 				backgroundColor: theme.palette.telemetry?.background.primary,
 				border: `1px solid ${theme.palette.telemetry?.border.light}`,
 				padding: "10px",
 				display: "flex",
 				flexDirection: "column",
 				gap: "3px",
-				minHeight: "100px",
 			}}
 		>
 			{/* speed */}
@@ -62,24 +69,25 @@ export default function Speedometer() {
 					textAlign: "center",
 					fontWeight: "bold",
 					color: getGaugeColor(),
-					fontSize: "45px",
+					fontSize: "clamp(1.25rem, 22cqw, 2.75rem)",
+					lineHeight: 1.1,
 				}}
 			>
 				{speed.toFixed(2)}
 			</Typography>
 
 			{/* Units */}
-			<Box sx={{ textAlign: "center", 
-				flex: 1, 
-				display: "flex", 
-				alignItems: "center", 
-				justifyContent: "center" 
+			<Box sx={{ textAlign: "center",
+				flex: 1,
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "center"
 			}}>
 
 				<Typography
 					sx={{
 						color: theme.palette.text.primary,
-						fontSize: "17px",
+						fontSize: "clamp(0.65rem, 8cqw, 1rem)",
 						marginLeft: "4px",
 					}}
 				>

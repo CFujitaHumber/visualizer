@@ -49,6 +49,6 @@ export { RadiusVisualizer, type RadiusVisualizerProps, type RadarObstacle } from
 export { RadiusVisualizerPanel, type RadiusVisualizerPanelProps } from "./RadiusVisualizerPanel";
 export { ShipRudderVisualizer, type ShipRudderVisualizerProps } from "./ShipRudderVisualizer";
 export { ShipRudderVisualizerPanel, type ShipRudderVisualizerPanelProps } from "./ShipRudderVisualizerPanel";
-export { TacticalMap, type TacticalMapProps, type TacticalMapPathPoint, type TacticalMapObstacle } from "./TacticalMap";
+export { TacticalMap, type TacticalMapProps } from "./TacticalMap";
 export { TacticalMapPanel, type TacticalMapPanelProps } from "./TacticalMapPanel";
 export { getPowerColor } from "./powerColor";

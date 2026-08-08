@@ -239,7 +239,8 @@ export function generateRandomState(): Status {
             odom: { position: { x: 0, y: 0, z: 0 }, orientation: { roll: 0, pitch: 0, yaw: 0 } },
             objects: [],
             camera: { active: false, width: 0, height: 0, encoding: "" }
-        }
+        },
+        system: { topics: [] },
     };
 }
 

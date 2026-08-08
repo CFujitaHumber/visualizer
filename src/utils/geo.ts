@@ -21,4 +21,26 @@ const measureLocalMeters = (lat1: number, lon1: number, lat2: number, lon2: numb
     return { x, y };
 };
 
-export { measureLocalMeters };
+/**
+ * Rotates a boat-relative position (x = right, y = forward, as reported by
+ * the ZED's object detection) by the vessel's current heading and translates
+ * it by the vessel's current world-frame position, producing a world-frame
+ * position in the same frame the vessel's own position (`zed.odom.position`)
+ * is expressed in. `z` passes through unchanged.
+ */
+const projectBoatRelative = <T extends { x: number; y: number; z: number }>(
+    position: T,
+    headingDeg: number,
+    anchor: { x: number; y: number },
+): T => {
+    const headingRad = (headingDeg * Math.PI) / 180;
+    const cos = Math.cos(headingRad);
+    const sin = Math.sin(headingRad);
+    return {
+        ...position,
+        x: anchor.x + (position.x * cos + position.y * sin),
+        y: anchor.y + (-position.x * sin + position.y * cos),
+    };
+};
+
+export { measureLocalMeters, projectBoatRelative };

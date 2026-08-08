@@ -1,35 +1,48 @@
 import React, { useEffect, useRef } from 'react';
-import type { CourseTrailPoint, DetectedObject } from '../../../types';
+import { useTheme, alpha } from '@mui/material/styles';
+import type { RootState } from '../../../store/store';
+import { useAppSelector } from '../../../store';
+import { catamaranSvgStr } from '../../../assets/svgSources';
+import {
+  ROBOT_LENGTH_M,
+  ROBOT_WIDTH_M,
+  FOV_RADIUS_M,
+  FOV_HALF_ANGLE_RAD,
+  MIN_BOAT_ICON_PX,
+  OBJECT_COLOR_KEYS,
+  DEFAULT_OBJECT_COLOR_KEY,
+} from '../../../utils/robot';
 
-export interface BigMapProps {
-  pathHistory: React.MutableRefObject<CourseTrailPoint[]>;
-  obstacles: React.MutableRefObject<DetectedObject[]>;
-  currentPos: React.MutableRefObject<{ x: number; y: number }>;
-  headingRef: React.MutableRefObject<number>;
-}
-
-// SVG Catamaran Data URL for drawing on canvas
-const catamaranSvgStr = `
-<svg xmlns="http://www.w3.org/2000/svg" width="70" height="95" viewBox="0 0 80 110">
-  <path d="M 16 5 C 10 5, 8 20, 8 45 C 8 70, 8 85, 12 90 C 14 93, 18 93, 20 90 C 22 85, 22 75, 22 65 L 22 25 C 22 15, 20 5, 16 5 Z" fill="#00435C" stroke="#B980F1" strokeWidth="1" />
-  <path d="M 64 5 C 70 5, 72 20, 72 45 C 72 70, 72 85, 68 90 C 66 93, 62 93, 60 90 C 58 85, 58 75, 58 65 L 58 25 C 58 15, 60 5, 64 5 Z" fill="#00435C" stroke="#B980F1" strokeWidth="1" />
-  <rect x="21" y="20" width="38" height="4" fill="#080721" stroke="#D9D9D9" strokeWidth="1" />
-  <rect x="21" y="70" width="38" height="4" fill="#080721" stroke="#D9D9D9" strokeWidth="1" />
-  <path d="M 26 24 C 23 35, 23 60, 26 70" fill="none" stroke="#D9D9D9" strokeWidth="1.5" />
-  <path d="M 54 24 C 57 35, 57 60, 54 70" fill="none" stroke="#D9D9D9" strokeWidth="1.5" />
-  <path d="M 28 32 C 26 45, 26 50, 28 62 L 52 62 C 54 50, 54 45, 52 32 Z" fill="#080721" stroke="#D9D9D9" strokeWidth="1.5" />
-  <rect x="33" y="38" width="14" height="18" rx="2" fill="none" stroke="#B980F1" strokeWidth="1" />
-  <circle cx="35" cy="40" r="1" fill="#D8FA07" />
-  <circle cx="45" cy="40" r="1" fill="#D8FA07" />
-  <circle cx="35" cy="54" r="1" fill="#D8FA07" />
-  <circle cx="45" cy="54" r="1" fill="#D8FA07" />
-</svg>
-`;
-
-export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentPos, headingRef }) => {
+export const BigMap: React.FC = () => {
+  const theme = useTheme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boatImgRef = useRef<HTMLImageElement | null>(null);
   const mapBoundsRef = useRef({ minX: -25, maxX: 25, minY: -25, maxY: 25 });
+
+  // occupancyGrid/navigationGrid aren't read here: Map.tsx's MapComponent already
+  // renders them elsewhere, and the basestation has no live publisher for either
+  // yet (see the `map` group in statusTypes.ts) — BigMap shows a lightweight
+  // procedural grid plus the swept-area wedge below instead.
+  const ZedObjects = useAppSelector((state: RootState) => state.telemetry.zed.objects);
+  const odom = useAppSelector((state: RootState) => state.telemetry.zed.odom.position);
+  const headingASV = useAppSelector((state: RootState) => state.telemetry.asv.heading);
+  const pathASV = useAppSelector((state: RootState) => state.telemetry.map.courseTrail);
+
+  // Mirrored into refs so the rAF render loop below (started once on mount, see
+  // the effect's comment) always reads live Redux state instead of the values
+  // captured in its closure at first render.
+  const zedObjectsRef = useRef(ZedObjects);
+  const odomRef = useRef(odom);
+  const headingRef = useRef(headingASV);
+  const pathRef = useRef(pathASV);
+  const themeRef = useRef(theme);
+  useEffect(() => {
+    zedObjectsRef.current = ZedObjects;
+    odomRef.current = odom;
+    headingRef.current = headingASV;
+    pathRef.current = pathASV;
+    themeRef.current = theme;
+  }, [ZedObjects, odom, headingASV, pathASV, theme]);
 
   useEffect(() => {
     const img = new Image();
@@ -37,7 +50,11 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
     img.onload = () => { boatImgRef.current = img; };
   }, []);
 
-  // Render Loop
+  // Render Loop. This is very similar to TacticalMap's render loop — both read
+  // live state via refs and share the same lerp/teleport-snap camera approach —
+  // but BigMap uses a deadzone-pan + max-zoom camera (always-auto, no manual
+  // gestures, background/ambient layer) while TacticalMap uses a bbox-fit camera
+  // with a manual pan/zoom override, so they aren't easily unified into one hook.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -46,16 +63,21 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
 
     let animationFrameId: number;
 
-    let smoothX = currentPos.current.x;
-    let smoothY = currentPos.current.y;
+    let smoothX = odomRef.current.x;
+    let smoothY = odomRef.current.y;
     let smoothHeading = headingRef.current;
-    
+
     let smoothScale = 0;
     let cameraCX = 0;
     let cameraCY = 0;
     let isCameraInit = false;
 
     const render = () => {
+      const ZedObjects = zedObjectsRef.current;
+      const odom = odomRef.current;
+      const headingASV = headingRef.current;
+      const pathASV = pathRef.current;
+
       const rect = canvas.parentElement?.getBoundingClientRect();
       if (rect && (canvas.width !== rect.width || canvas.height !== rect.height)) {
         canvas.width = rect.width;
@@ -67,10 +89,10 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
         return;
       }
 
-      const targetX = currentPos.current.x;
-      const targetY = currentPos.current.y;
-      const targetH = headingRef.current;
-      
+      const targetX = odom.x;
+      const targetY = odom.y;
+      const targetH = headingASV;
+
       // Detect teleport (e.g. initial connection) and snap instead of lerping
       if (Math.hypot(targetX - smoothX, targetY - smoothY) > 50) {
         smoothX = targetX;
@@ -84,13 +106,13 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
         // Fast lerp to track the 30Hz Redux state perfectly
         smoothX += (targetX - smoothX) * 0.3;
         smoothY += (targetY - smoothY) * 0.3;
-        
+
         let diff = targetH - smoothHeading;
         while (diff < -180) diff += 360;
         while (diff > 180) diff -= 360;
         smoothHeading += diff * 0.3;
       }
-      
+
       const currentX = smoothX;
       const currentY = smoothY;
       const heading = smoothHeading;
@@ -101,56 +123,56 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
+
       // We will calculate scale dynamically further down based on cameraCX
       const maxZoomScale = Math.min((canvas.width / 2) / 80, (canvas.height / 2) / 80);
       let targetScale = maxZoomScale; // Start with max zoom
-      
+
       // Calculate view dimensions to create a panning deadzone
       // We want the FOV cone (40m) to comfortably fit before panning
       const viewW = canvas.width / (smoothScale || 1);
       const viewH = canvas.height / (smoothScale || 1);
       const marginX = Math.max(0, (viewW / 2) - 60);
       const marginY = Math.max(0, (viewH / 2) - 60);
-      
+
       if (!isCameraInit) {
         cameraCX = currentX;
         cameraCY = currentY;
         isCameraInit = true;
       }
-      
+
       if (currentX > cameraCX + marginX) cameraCX = currentX - marginX;
       if (currentX < cameraCX - marginX) cameraCX = currentX + marginX;
       if (currentY > cameraCY + marginY) cameraCY = currentY - marginY;
       if (currentY < cameraCY - marginY) cameraCY = currentY + marginY;
-      
+
       // Now that cameraCX is updated, check if obstacles or boat are near the real screen edges.
       // If they are, we need to zoom out so they fit!
       let maxViewDistX = Math.abs(currentX - cameraCX) + 60;
       let maxViewDistY = Math.abs(currentY - cameraCY) + 60;
-      
+
       // Ensure all mapped obstacles remain on screen
-      obstacles.current.forEach(obs => {
+      ZedObjects.forEach(obs => {
         const x = obs.position.x;
         const y = obs.position.y;
-        maxViewDistX = Math.max(maxViewDistX, Math.abs(x - cameraCX) + 40);
-        maxViewDistY = Math.max(maxViewDistY, Math.abs(y - cameraCY) + 40);
+        maxViewDistX = Math.max(maxViewDistX, Math.abs(x - cameraCX) + FOV_RADIUS_M);
+        maxViewDistY = Math.max(maxViewDistY, Math.abs(y - cameraCY) + FOV_RADIUS_M);
       });
-      
+
       // Ensure the entire mapped blue trail remains on screen
-      pathHistory.current.forEach(pt => {
-        maxViewDistX = Math.max(maxViewDistX, Math.abs(pt.x - cameraCX) + 40);
-        maxViewDistY = Math.max(maxViewDistY, Math.abs(pt.y - cameraCY) + 40);
+      pathASV.forEach(pt => {
+        maxViewDistX = Math.max(maxViewDistX, Math.abs(pt.x - cameraCX) + FOV_RADIUS_M);
+        maxViewDistY = Math.max(maxViewDistY, Math.abs(pt.y - cameraCY) + FOV_RADIUS_M);
       });
-      
+
       const fitScale = Math.min((canvas.width / 2) / maxViewDistX, (canvas.height / 2) / maxViewDistY);
       targetScale = Math.min(fitScale, maxZoomScale);
-      
+
       if (smoothScale === 0) {
         smoothScale = targetScale;
       } else {
         // Smoothly interpolate scale
-        smoothScale += (targetScale - smoothScale) * 0.05; 
+        smoothScale += (targetScale - smoothScale) * 0.05;
       }
 
       const scale = smoothScale || 1;
@@ -182,7 +204,7 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
       ctx.lineWidth = Math.max(1 / scale, 0.5); // At least visible physical thickness
       const startGridX = Math.floor(visibleMinX / gridSize) * gridSize;
       const startGridY = Math.floor(visibleMinY / gridSize) * gridSize;
-      
+
       ctx.beginPath();
       for (let x = startGridX; x <= visibleMaxX; x += gridSize) {
         ctx.moveTo(x, visibleMinY);
@@ -199,49 +221,35 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
       // ctx.fill() then perfectly unions them without overlapping opacity or jagged connecting lines!
       ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
       ctx.beginPath();
-      pathHistory.current.forEach((pt) => {
+      pathASV.forEach((pt) => {
         const sweptConeAngle = Math.PI / 2 - (pt.heading * Math.PI) / 180;
         ctx.moveTo(pt.x, pt.y);
-        ctx.arc(pt.x, pt.y, 40, sweptConeAngle - Math.PI / 6, sweptConeAngle + Math.PI / 6);
+        ctx.arc(pt.x, pt.y, FOV_RADIUS_M, sweptConeAngle - FOV_HALF_ANGLE_RAD, sweptConeAngle + FOV_HALF_ANGLE_RAD);
         ctx.lineTo(pt.x, pt.y);
       });
       // Also draw the wedge at the current smooth position so it perfectly connects to the boat!
       const currentConeAngle = Math.PI / 2 - (smoothHeading * Math.PI) / 180;
       ctx.moveTo(smoothX, smoothY);
-      ctx.arc(smoothX, smoothY, 40, currentConeAngle - Math.PI / 6, currentConeAngle + Math.PI / 6);
+      ctx.arc(smoothX, smoothY, FOV_RADIUS_M, currentConeAngle - FOV_HALF_ANGLE_RAD, currentConeAngle + FOV_HALF_ANGLE_RAD);
       ctx.lineTo(smoothX, smoothY);
       ctx.fill();
 
       // Mapped Objects
       ctx.lineWidth = 1 / scale;
-      obstacles.current.forEach((obs) => {
+      ZedObjects.forEach((obs) => {
         const x = obs.position.x;
         const y = obs.position.y;
         const isHome = obs.label === "Home Dock";
-        
-        let fill = 'rgba(239, 68, 68, 0.2)';
-        let stroke = '#ef4444';
-        
-        if (obs.label === "Boundary Buoy") {
-           fill = 'rgba(245, 158, 11, 0.2)'; stroke = '#f59e0b';
-        } else if (obs.label === "Nav Green") {
-           fill = 'rgba(16, 185, 129, 0.2)'; stroke = '#10b981';
-        } else if (obs.label === "Nav Red") {
-           fill = 'rgba(239, 68, 68, 0.2)'; stroke = '#ef4444';
-        } else if (obs.label === "Obstacle" || obs.label === "Speed Gate" || obs.label === "Turnaround Buoy") {
-           fill = 'rgba(234, 179, 8, 0.2)'; stroke = '#eab308';
-        } else if (obs.label === "Dock Buoy") {
-           fill = 'rgba(6, 182, 212, 0.2)'; stroke = '#06b6d4';
-        } else if (obs.label === "Acoustic Beacon") {
-           fill = 'rgba(168, 85, 247, 0.2)'; stroke = '#a855f7';
-        } else if (obs.label === "Island") {
-           fill = 'rgba(209, 213, 219, 0.2)'; stroke = '#d1d5db';
-        }
-        
+
+        const colorKey = OBJECT_COLOR_KEYS[obs.label] ?? DEFAULT_OBJECT_COLOR_KEY;
+        const objectColors = themeRef.current.palette.telemetry?.objects;
+        const stroke = objectColors?.[colorKey as keyof typeof objectColors] ?? '#ef4444';
+        const fill = alpha(stroke, 0.2);
+
         ctx.beginPath();
         if (isHome) {
-          ctx.fillStyle = 'rgba(16, 185, 129, 0.2)';
-          ctx.strokeStyle = '#10b981';
+          ctx.fillStyle = fill;
+          ctx.strokeStyle = stroke;
           ctx.rect(x - 3, y - 3, 6, 6);
         } else {
           ctx.fillStyle = fill;
@@ -255,21 +263,22 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
       // Vision Cone
       ctx.save();
       ctx.translate(currentX, currentY);
-      
+
       // In this coordinate system, +X is Right, +Y is Up.
       // Standard maritime heading is 0=North(Up), 90=East(Right).
       // Angle 0 in Canvas is +X (Right). Math.PI/2 is +Y (Up).
       const coneAngle = Math.PI / 2 - (heading * Math.PI) / 180;
-      
+
       ctx.fillStyle = 'rgba(16, 185, 129, 0.1)';
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.arc(0, 0, 40, coneAngle - Math.PI / 6, coneAngle + Math.PI / 6);
+      ctx.arc(0, 0, FOV_RADIUS_M, coneAngle - FOV_HALF_ANGLE_RAD, coneAngle + FOV_HALF_ANGLE_RAD);
       ctx.lineTo(0, 0);
       ctx.fill();
       ctx.restore();
-      
-      // Boat Icon (Scale with the map, drawn intentionally large to be visible: 8m x 11.2m physical size)
+
+      // Boat Icon (scales with the map, drawn at real hull size — see robot.ts —
+      // with a minimum on-screen size so it doesn't vanish when zoomed out)
       if (boatImgRef.current) {
         ctx.save();
         ctx.translate(currentX, currentY);
@@ -277,9 +286,10 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
         // We do need to invert Y for drawing the image properly (since canvas image draws top-left down)
         ctx.scale(1, -1);
         ctx.rotate((heading * Math.PI) / 180);
-        const boatW = 8;
-        const boatH = 11.2;
-        ctx.drawImage(boatImgRef.current, -boatW/2, -boatH/2, boatW, boatH);
+        const minBoatHWorld = MIN_BOAT_ICON_PX / scale;
+        const boatH = Math.max(ROBOT_LENGTH_M, minBoatHWorld);
+        const boatW = boatH * (ROBOT_WIDTH_M / ROBOT_LENGTH_M);
+        ctx.drawImage(boatImgRef.current, -boatW / 2, -boatH / 2, boatW, boatH);
         ctx.restore();
       }
 
@@ -293,8 +303,8 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-    // currentPos/headingRef/obstacles/pathHistory are stable refs read fresh each frame — the render loop only needs to (re)start on mount.
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Live state comes from the refs mirrored above — the render loop only needs to (re)start on mount.
+  }, []);
 
   return (
     <div style={{
@@ -312,19 +322,19 @@ export const BigMap: React.FC<BigMapProps> = ({ pathHistory, obstacles, currentP
       {/* 2D Canvas */}
       <div style={{ flex: 1, position: 'relative', cursor: 'default', overflow: 'hidden' }}>
         <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'block' }} />
-        
+
         {/* Map Legend */}
-        <div style={{ 
-          position: 'absolute', 
-          top: '110px', 
-          left: '24px', 
-          backgroundColor: 'rgba(8, 7, 33, 0.85)', 
-          padding: '12px 16px', 
-          borderRadius: '8px', 
-          border: '1px solid rgba(255, 255, 255, 0.15)', 
-          fontSize: '11px', 
-          color: '#F2F2F2', 
-          pointerEvents: 'none', 
+        <div style={{
+          position: 'absolute',
+          top: '110px',
+          left: '24px',
+          backgroundColor: 'rgba(8, 7, 33, 0.85)',
+          padding: '12px 16px',
+          borderRadius: '8px',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          fontSize: '11px',
+          color: '#F2F2F2',
+          pointerEvents: 'none',
           backdropFilter: 'blur(10px)',
           boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
         }}>

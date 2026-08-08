@@ -13,6 +13,7 @@ import type { Status, Path, Grid, TaskLocation, TaskData, CourseTrailPoint, ZedP
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { FETCH_TELEMETRY_SUCCESS } from '../../types/telemetryInterfaces';
 import type { DetectedObject } from '../../types';
+import { projectBoatRelative } from '../../utils/geo';
 
 /**
  * @constant telemetrySlice
@@ -53,10 +54,24 @@ const telemetrySlice = createSlice({
         setASVHeading: (state, action: PayloadAction<number>) => { state.asv.heading = action.payload; },
         setASVLongitude: (state, action: PayloadAction<number>) => { state.asv.longitude = action.payload; },
         setASVLatitude: (state, action: PayloadAction<number>) => { state.asv.latitude = action.payload; },
+        // The basestation computes this itself: 100 while its `phone` GPS/heading topic is
+        // fresh, 0 once it's gone stale (>5s) — a connection-freshness proxy, not real RSSI.
         setSignalStrength: (state, action: PayloadAction<number>) => { state.signal.strength = action.payload; },
         setZedOdomPosition: (state, action: PayloadAction<ZedPosition>) => { state.zed.odom.position = action.payload; },
         setZedOdomOrientation: (state, action: PayloadAction<ZedOrientation>) => { state.zed.odom.orientation = action.payload; },
-        setZedObjects: (state, action: PayloadAction<DetectedObject[]>) => { state.zed.objects = action.payload; },
+        // ZED object positions arrive boat-relative (x = right, y = forward). Project
+        // them into the same world frame `zed.odom.position` is expressed in — using
+        // the vessel's current heading/position as the anchor — so BigMap/TacticalMap
+        // can draw obstacles directly alongside the boat icon and course trail without
+        // each needing its own rotation math.
+        setZedObjects: (state, action: PayloadAction<DetectedObject[]>) => {
+            const heading = state.asv.heading;
+            const anchor = state.zed.odom.position;
+            state.zed.objects = action.payload.map((obj) => ({
+                ...obj,
+                position: projectBoatRelative(obj.position, heading, anchor),
+            }));
+        },
         setZedCameraActive: (state, action: PayloadAction<boolean>) => { state.zed.camera.active = action.payload; },
         setZedCameraInfo: (state, action: PayloadAction<{ width: number; height: number; encoding: string }>) => {
             state.zed.camera.width = action.payload.width;
@@ -70,6 +85,7 @@ const telemetrySlice = createSlice({
             state.map.courseTrail.push(action.payload);
         },
         clearCourseTrail: (state) => { state.map.courseTrail = []; },
+        setSystemTopics: (state, action: PayloadAction<string[]>) => { state.system.topics = action.payload; },
     },
     extraReducers: (builder) => {
         builder.addCase(FETCH_TELEMETRY_SUCCESS, (state, action) => {
@@ -82,6 +98,17 @@ const telemetrySlice = createSlice({
                 if ('courseTrail' in incomingMap) state.map.courseTrail = incomingMap.courseTrail;
             }
             if (!state.map.courseTrail) state.map.courseTrail = [];
+
+            // `rest` includes the full incoming `zed`, so `state.zed.objects` was just
+            // overwritten with boat-relative positions by the Object.assign above —
+            // project them into world frame now that state.asv.heading/zed.odom.position
+            // reflect this same telemetry frame. See setZedObjects for why.
+            const heading = state.asv.heading;
+            const anchor = state.zed.odom.position;
+            state.zed.objects = state.zed.objects.map((obj) => ({
+                ...obj,
+                position: projectBoatRelative(obj.position, heading, anchor),
+            }));
         });
     },
 });
@@ -113,6 +140,7 @@ export const {
     setZedObjects,
     setZedCameraActive,
     setZedCameraInfo,
+    setSystemTopics,
 } = telemetrySlice.actions;
 
 export default telemetrySlice.reducer;

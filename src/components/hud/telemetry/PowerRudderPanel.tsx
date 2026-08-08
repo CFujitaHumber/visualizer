@@ -30,6 +30,9 @@ import { useSpring, animated } from "@react-spring/web";
 import { RudderIcon } from "../../../assets/RudderIcon";
 import { getPowerColor } from "./powerColor";
 
+/**
+ * @deprecated you can still use the power rudder panel, but it's better to use the ShipRudderPanel instead, which is more compact and has a better layout for the ship's telemetry.
+ */
 const Panel = ({ label, content, value, width }: { label: string; content: React.ReactNode; value?: number; width?: string }) => {
 	const theme = useTheme();
 	return (

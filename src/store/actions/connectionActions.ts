@@ -99,7 +99,7 @@ export const initConnection = (options: { silentFail?: boolean } = {}) => async 
     // Defer "connected" toast until the first data frame arrives.
     let connected = false;
 
-    socket.onmessage = (event) => {
+    socket!.onmessage = (event) => {
         if (!connected) {
             connected = true;
             dispatch(setConnectionStatus('connected'));
@@ -122,7 +122,7 @@ export const initConnection = (options: { silentFail?: boolean } = {}) => async 
         }
     };
 
-    socket.onclose = () => {
+    socket!.onclose = () => {
         if (!connected) {
             // Socket closed before any data — treat same as failed-to-open.
             if (silentFail) fallbackToMock(dispatch);
@@ -134,7 +134,7 @@ export const initConnection = (options: { silentFail?: boolean } = {}) => async 
         fallbackToMock(dispatch);
     };
 
-    socket.onerror = () => {
+    socket!.onerror = () => {
         // onclose fires immediately after onerror, no extra dispatch needed.
     };
 };

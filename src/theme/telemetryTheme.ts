@@ -29,6 +29,16 @@ declare module "@mui/material/styles" {
         secondary: string;
       };
       accent: string;
+      /** Detected-object marker colors, keyed by robot.ts's OBJECT_COLOR_KEYS. */
+      objects: {
+        navRed: string;
+        navGreen: string;
+        boundary: string;
+        hazard: string;
+        dock: string;
+        beacon: string;
+        island: string;
+      };
     };
     occupancyMap: {
       empty: string;
@@ -72,6 +82,15 @@ declare module "@mui/material/styles" {
         secondary?: string;
       };
       accent?: string;
+      objects?: {
+        navRed?: string;
+        navGreen?: string;
+        boundary?: string;
+        hazard?: string;
+        dock?: string;
+        beacon?: string;
+        island?: string;
+      };
     };
     occupancyMap?: {
       empty?: string;
@@ -141,6 +160,15 @@ export const telemetryTheme = createTheme({
         secondary: "#e5e7eb",
       },
       accent: "#fbbf24",
+      objects: {
+        navRed: "#ef4444",
+        navGreen: "#10b981",
+        boundary: "#f59e0b",
+        hazard: "#eab308",
+        dock: "#06b6d4",
+        beacon: "#a855f7",
+        island: "#d1d5db",
+      },
     },
     occupancyMap: {
       empty: "#1d4ed8",

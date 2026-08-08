@@ -8,6 +8,31 @@
  * @license MIT
  */
 
+/**
+ * Catamaran hull artwork, shared by BigMap and TacticalMap (canvas boat icon)
+ * and ShipRudderVisualizer (themed JSX rudder animation reuses this path
+ * data). Kept as a raw SVG template string rather than a pre-baked data URI
+ * like the assets below: the canvas call sites encode it into a data URI
+ * themselves via `encodeURIComponent`, and ShipRudderVisualizer needs the
+ * raw path `d` data to re-theme with live palette colors, not a frozen image.
+ */
+export const catamaranSvgStr = `
+<svg xmlns="http://www.w3.org/2000/svg" width="70" height="95" viewBox="0 0 80 110">
+  <path d="M 16 5 C 10 5, 8 20, 8 45 C 8 70, 8 85, 12 90 C 14 93, 18 93, 20 90 C 22 85, 22 75, 22 65 L 22 25 C 22 15, 20 5, 16 5 Z" fill="#00435C" stroke="#B980F1" stroke-width="1" />
+  <path d="M 64 5 C 70 5, 72 20, 72 45 C 72 70, 72 85, 68 90 C 66 93, 62 93, 60 90 C 58 85, 58 75, 58 65 L 58 25 C 58 15, 60 5, 64 5 Z" fill="#00435C" stroke="#B980F1" stroke-width="1" />
+  <rect x="21" y="20" width="38" height="4" fill="#080721" stroke="#D9D9D9" stroke-width="1" />
+  <rect x="21" y="70" width="38" height="4" fill="#080721" stroke="#D9D9D9" stroke-width="1" />
+  <path d="M 26 24 C 23 35, 23 60, 26 70" fill="none" stroke="#D9D9D9" stroke-width="1.5" />
+  <path d="M 54 24 C 57 35, 57 60, 54 70" fill="none" stroke="#D9D9D9" stroke-width="1.5" />
+  <path d="M 28 32 C 26 45, 26 50, 28 62 L 52 62 C 54 50, 54 45, 52 32 Z" fill="#080721" stroke="#D9D9D9" stroke-width="1.5" />
+  <rect x="33" y="38" width="14" height="18" rx="2" fill="none" stroke="#B980F1" stroke-width="1" />
+  <circle cx="35" cy="40" r="1" fill="#D9FA05" />
+  <circle cx="45" cy="40" r="1" fill="#D9FA05" />
+  <circle cx="35" cy="54" r="1" fill="#D9FA05" />
+  <circle cx="45" cy="54" r="1" fill="#D9FA05" />
+</svg>
+`;
+
 /** Data URI for boat.svg */
 export const boatSvgUrl =
     'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMjRweCIgdmlld0JveD0iMCAtOTYwIDk2MCA5NjAiIHdpZHRoPSIyNHB4IiBmaWxsPSIjZTNlM2UzIj48cGF0aCBkPSJNMTUyLTgwaC0zMnYtODBoMzJxNDggMCA5MS41LTEwLjVUMzQxLTIwNHEzOCAxOSA2Ni41IDMxLjVUNDgwLTE2MHE0NCAwIDcyLjUtMTIuNVQ2MTktMjA0cTUzIDIzIDk3LjUgMzMuNVQ4MDktMTYwaDMxdjgwaC0zMXEtNDkgMC05NS41LTlUNjIyLTExNnEtNDAgMTktNzMgMjd0LTY5IDhxLTM2IDAtNjguNS04VDMzOS0xMTZxLTQ1IDE4LTkxLjUgMjdUMTUyLTgwWm0yMjMtMjAwLTQ1LTQwcS0yNyAyNy02MC41IDQ2VDE5OC0yNDdsLTg1LTI3M3EtNS0xNyAzLTMxdDI1LTE5bDU5LTE2di0xMzRxMC0zMyAyMy41LTU2LjVUMjgwLTgwMGgxMDB2LTgwaDIwMHY4MGgxMDBxMzMgMCA1Ni41IDIzLjVUNzYwLTcyMHYxMzRsNTkgMTZxMTcgNSAyNSAxOXQzIDMxbC04NSAyNzNxLTM4LTgtNzEuNS0yN1Q2MzAtMzIwbC00NSA0MHEtNDUgNDAtMTA1IDQwdC0xMDUtNDBabTEwNy00MHEzMSAwIDU1LTIwLjV0NDQtNDMuNWw0Ni01MyA0MSA0MnExMSAxMSAyMi41IDIwLjVUNzEzLTM1NWw0Ni0xNDktMjc5LTczLTI3OCA3MyA0NiAxNDlxMTEtMTAgMjIuNS0xOS41VDI5My0zOTVsNDEtNDIgNDYgNTNxMjAgMjQgNDUgNDR0NTcgMjBaTTI4MC02MDdsMjAwLTUzIDIwMCA1M3YtMTEzSDI4MHYxMTNabTIwMSAxNThaIi8+PC9zdmc+';

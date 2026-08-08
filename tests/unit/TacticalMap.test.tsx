@@ -3,25 +3,18 @@
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
+import { Provider } from 'react-redux';
 import { telemetryTheme } from '@/theme';
-import { TacticalMap, type TacticalMapPathPoint, type TacticalMapObstacle } from '@/components/hud/telemetry/TacticalMap';
+import store from '@/store/store';
+import { TacticalMap } from '@/components/hud/telemetry/TacticalMap';
 
 const renderMap = (onClose: () => void = () => {}) => {
-  const pathHistory = { current: [] as TacticalMapPathPoint[] };
-  const obstacles = { current: [] as TacticalMapObstacle[] };
-  const currentPos = { current: { x: 0, y: 0 } };
-  const headingRef = { current: 0 };
-
   return render(
-    <ThemeProvider theme={telemetryTheme}>
-      <TacticalMap
-        onClose={onClose}
-        pathHistory={pathHistory}
-        obstacles={obstacles}
-        currentPos={currentPos}
-        headingRef={headingRef}
-      />
-    </ThemeProvider>,
+    <Provider store={store}>
+      <ThemeProvider theme={telemetryTheme}>
+        <TacticalMap onClose={onClose} />
+      </ThemeProvider>
+    </Provider>,
   );
 };
 
@@ -53,5 +46,10 @@ describe('TacticalMap', () => {
 
     fireEvent.click(screen.getByText('Close Map'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts with the recenter button disabled (camera is auto-following)', () => {
+    renderMap();
+    expect(screen.getByText('Recenter')).toBeDisabled();
   });
 });

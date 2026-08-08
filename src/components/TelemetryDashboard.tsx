@@ -49,7 +49,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../store/store';
 import BigMap from './hud/telemetry/BigMap';
@@ -57,7 +57,6 @@ import TaskManagementHUD from './hud/telemetry/TaskManagementHUD';
 import SystemStatusHUD from './hud/telemetry/SystemStatusHUD';
 import EventLogsHUD from './hud/telemetry/EventLogsHUD';
 import { RadiusVisualizerPanel, ShipRudderVisualizerPanel } from './hud/telemetry';
-import { measureLocalMeters } from '../utils/geo';
 
 // Scrolling Compass Tape Panel
 const CompassHUD: React.FC<{ heading: number }> = ({ heading }) => {
@@ -159,41 +158,12 @@ const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({ placeholderSrc,
   }, [isBigMapOpen]);
 
   // Redux state — only what this component needs to pick a background/skeleton;
-  // each overlay panel (task/status/radar/propulsion/logs) selects its own slice.
-  const {
-    connectionStatus, heading, latitude, longitude, speed, videoStreamUrl, pathHistory, obstacles
-  } = useSelector((state: RootState) => ({
+  // each overlay panel (task/status/radar/propulsion/logs), and BigMap itself, select their own slices.
+  const { connectionStatus, heading, videoStreamUrl } = useSelector((state: RootState) => ({
     connectionStatus: state.telemetry.signal.strength > 0 ? 'connected' : 'disconnected',
     heading: state.telemetry.asv.heading,
-    latitude: state.telemetry.asv.latitude,
-    longitude: state.telemetry.asv.longitude,
-    speed: state.telemetry.asv.speed,
     videoStreamUrl: state.video.streamUrl,
-    pathHistory: state.telemetry.map.courseTrail,
-    obstacles: state.telemetry.zed.objects,
   }));
-
-  const headingRef = useRef(heading);
-  const speedRef = useRef(speed);
-  const pathHistoryRef = useRef(pathHistory);
-  const obstaclesRef = useRef(obstacles);
-
-  useEffect(() => {
-    headingRef.current = heading;
-    speedRef.current = speed;
-    pathHistoryRef.current = pathHistory;
-    obstaclesRef.current = obstacles;
-  }, [heading, speed, pathHistory, obstacles]);
-
-  const startCoords = useRef<{ lat: number; lon: number } | null>(null);
-  const currentPos = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    if (latitude === undefined || longitude === undefined || (latitude === 0 && longitude === 0)) return;
-    if (!startCoords.current) startCoords.current = { lat: latitude, lon: longitude };
-    const loc = measureLocalMeters(startCoords.current.lat, startCoords.current.lon, latitude, longitude);
-    currentPos.current = loc;
-  }, [latitude, longitude]);
 
   if (connectionStatus !== 'connected') {
     return (
@@ -385,12 +355,7 @@ const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({ placeholderSrc,
     }}>
       {/* Background Layer: Either BigMap or Camera Feed */}
       {isBigMapOpen ? (
-        <BigMap
-          pathHistory={pathHistoryRef}
-          obstacles={obstaclesRef}
-          currentPos={currentPos}
-          headingRef={headingRef}
-        />
+        <BigMap />
       ) : (
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0,

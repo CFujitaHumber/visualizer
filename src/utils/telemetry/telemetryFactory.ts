@@ -424,6 +424,9 @@ export function generateRandomState(): { status: Status; fineGrid: Grid } {
                 encoding: "",
             },
         },
+        system: {
+            topics: [],
+        },
     };
 
     return { status, fineGrid };

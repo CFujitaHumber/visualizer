@@ -48,6 +48,7 @@ export default function TaskData() {
 	const theme = useTheme();
 	const taskData = useSelector((state: RootState) => state.telemetry.task.data);
 	const zed = useSelector((state: RootState) => state.telemetry.zed);
+	const topics = useSelector((state: RootState) => state.telemetry.system.topics);
 
 	const getStatusColor = (status: string | undefined) => {
 		switch (status) {
@@ -144,6 +145,21 @@ export default function TaskData() {
 							{(obj.confidence * 100).toFixed(0)}% @ ({fmt(obj.position.x)}, {fmt(obj.position.y)}, {fmt(obj.position.z)})
 						</Typography>
 					</Box>
+				))
+			)}
+
+			{/* Services / Topics */}
+			{sectionLabel(`Services / Topics (${topics.length})`)}
+			{topics.length === 0 ? (
+				<Typography sx={{ fontSize: "10px", color: theme.palette.telemetry?.text.secondary }}>None</Typography>
+			) : (
+				topics.map((topic) => (
+					<Typography
+						key={topic}
+						sx={{ fontSize: "9px", color: theme.palette.telemetry?.text.primary, fontFamily: "monospace" }}
+					>
+						{topic}
+					</Typography>
 				))
 			)}
 		</Box>

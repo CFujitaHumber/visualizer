@@ -8,10 +8,12 @@ import reducer, {
   setLeftPower,
   setRudderAngle,
   appendCourseTrailPoint,
+  setZedObjects,
+  setSystemTopics,
 } from '@/store/slices/telemetrySlice';
 import { InitialStatus } from '@/types/statusTypes';
 import { FETCH_TELEMETRY_SUCCESS } from '@/types/telemetryInterfaces';
-import type { Status } from '@/types';
+import type { Status, DetectedObject } from '@/types';
 
 describe('telemetrySlice', () => {
   it('returns the initial status by default', () => {
@@ -61,5 +63,65 @@ describe('telemetrySlice', () => {
     expect(state.map.courseTrail).toHaveLength(500);
     // oldest points were shifted out
     expect(state.map.courseTrail[0]).toEqual({ x: 5, y: 5, heading: 0 });
+  });
+
+  const boatRelativeObject: DetectedObject = {
+    label: 'Nav Green',
+    label_id: 1,
+    confidence: 0.9,
+    position: { x: 5, y: 0, z: 0 }, // 5m to the vessel's right
+  };
+
+  it('setZedObjects projects boat-relative positions into world frame (identity heading)', () => {
+    let state = reducer(undefined, { type: '@@INIT' });
+    state = reducer(state, SET_STATUS({ zed: { ...state.zed, odom: { ...state.zed.odom, position: { x: 10, y: 20, z: 0 } } } }));
+    // heading 0 — rotation is identity, projection is a plain translate by the anchor
+    state = reducer(state, setZedObjects([boatRelativeObject]));
+
+    expect(state.zed.objects[0]!.position).toEqual({ x: 15, y: 20, z: 0 });
+    expect(state.zed.objects[0]!.label).toBe('Nav Green');
+  });
+
+  it('setZedObjects rotates boat-relative positions by the current heading', () => {
+    let state = reducer(undefined, { type: '@@INIT' });
+    state = reducer(state, setASVHeading(90)); // facing east
+    state = reducer(state, SET_STATUS({ zed: { ...state.zed, odom: { ...state.zed.odom, position: { x: 10, y: 20, z: 0 } } } }));
+    state = reducer(state, setZedObjects([boatRelativeObject]));
+
+    // 5m to the right of a boat facing east lands south of it: x unchanged, y - 5
+    expect(state.zed.objects[0]!.position).toEqual({ x: 10, y: 15, z: 0 });
+  });
+
+  it('FETCH_TELEMETRY_SUCCESS projects incoming zed.objects using that same frame', () => {
+    const incoming: Status = {
+      ...InitialStatus,
+      asv: { ...InitialStatus.asv, heading: 90 },
+      zed: {
+        ...InitialStatus.zed,
+        odom: { ...InitialStatus.zed.odom, position: { x: 10, y: 20, z: 0 } },
+        objects: [boatRelativeObject],
+      },
+    };
+    const state = reducer(undefined, { type: FETCH_TELEMETRY_SUCCESS, payload: incoming });
+
+    expect(state.zed.objects[0]!.position).toEqual({ x: 10, y: 15, z: 0 });
+  });
+
+  it('setSystemTopics replaces the topic list', () => {
+    let state = reducer(undefined, { type: '@@INIT' });
+    expect(state.system.topics).toEqual([]);
+
+    state = reducer(state, setSystemTopics(['phone', 'task']));
+    expect(state.system.topics).toEqual(['phone', 'task']);
+  });
+
+  it('FETCH_TELEMETRY_SUCCESS merges the incoming system.topics list', () => {
+    const incoming: Status = {
+      ...InitialStatus,
+      system: { topics: ['phone', 'zed/zed_node/odom'] },
+    };
+    const state = reducer(undefined, { type: FETCH_TELEMETRY_SUCCESS, payload: incoming });
+
+    expect(state.system.topics).toEqual(['phone', 'zed/zed_node/odom']);
   });
 });

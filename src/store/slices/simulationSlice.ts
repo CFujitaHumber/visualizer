@@ -13,12 +13,12 @@ import type { Grid } from '../../types';
  * @interface SimulationState
  * @description Represents the state of the simulation in the Redux store.
  * @property {Grid} fineGrid - The fine obstacle grid used for simulation, represented as a 2D array of cell states.
- * @property {number} currentHeading - The current heading of the vessel in degrees (0 = north, 90 = east).
- * @property {number} currentSpeed - The current speed of the vessel in cells per second.
+ * @property {number} currentHeading - The heading of the water current in degrees (0 = north, 90 = east), consumed by ForceVectorsPanel's force-vector math. Distinct from the vessel's own heading, which lives in telemetry.asv.heading.
+ * @property {number} currentSpeed - The speed of the water current in cells per second, consumed by ForceVectorsPanel's force-vector math. Distinct from the vessel's own speed, which lives in telemetry.asv.speed.
  * @property {'automatic' | 'manual'} simMode - The current simulation mode, either 'automatic' or 'manual'.
  * @remarks
- * The simulation state is used to manage the fine obstacle grid and vessel dynamics during simulation. 
- * It allows for switching between automatic and manual modes, adjusting heading and speed, and updating the fine grid based on sensor data or user input.
+ * The simulation state is used to manage the fine obstacle grid and environmental water-current dynamics during simulation.
+ * It allows for switching between automatic and manual modes, adjusting the simulated current's heading and speed, and updating the fine grid based on sensor data or user input.
  */
 export interface SimulationState {
     fineGrid: Grid;
@@ -56,12 +56,19 @@ export const simulationSlice = createSlice({
     name: 'simulation',
     initialState,
     reducers: {
+        // currentHeading/currentSpeed model water-current drift (used by ForceVectorsPanel's
+        // force-vector math), not the ASV's own heading/speed — those live in
+        // telemetry.asv.{heading,speed} (see telemetrySlice.ts). Keep both; they are not duplicates.
         setFineGrid: (state, action: PayloadAction<Grid>) => {
             state.fineGrid = action.payload;
         },
+        // Current as in the water current. probbably bad naming
         setCurrentHeading: (state, action: PayloadAction<number>) => {
             state.currentHeading = action.payload;
         },
+        // No live-telemetry default is needed here: the ASV has no current-sensing
+        // hardware, so currentHeading/currentSpeed only ever get set by ForceVectorsPanel's
+        // manual-mode UI, never overwritten by real telemetry (see the class remarks above).
         setCurrentSpeed: (state, action: PayloadAction<number>) => {
             state.currentSpeed = action.payload;
         },

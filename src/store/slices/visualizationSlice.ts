@@ -58,6 +58,12 @@ const initialState: VisualizationState = {
     showFogOfWar: true,
 };
 
+// Global vs. local grid: SLAM Toolbox (the ASV's current mapping stack) owns the
+// map->odom TF chain and publishes the global /map. There's no local-grid publisher
+// yet, and the basestation bridge doesn't subscribe to /map either (see the `map`
+// group in statusTypes.ts) — showGlobalGrid/showLocalGrid are UI toggles ready for
+// whichever of those the bridge eventually forwards.
+
 /**
  * @constant visualizationSlice
  * @description Redux slice for managing visual rendering preferences.
