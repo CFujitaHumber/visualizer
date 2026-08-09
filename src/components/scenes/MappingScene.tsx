@@ -10,16 +10,30 @@ import { useEnginePhysics } from 'react-isometric-engine';
 import { useAutoPathAnimation } from '../../hooks/useAutoPathAnimation';
 import { useAppSelector, useAppDispatch, type RootState } from '../../store';
 
-import { clearCourseTrail, appendCourseTrailPoint, setASVSpeed, setASVHeading } from '../../store/slices/telemetrySlice';
+import { setASVSpeed, setASVHeading } from '../../store/slices/telemetrySlice';
+import { appendSceneTrailPoint, clearSceneTrail } from '../../store/slices/sceneTrailSlice';
 import { regenerateMockTelemetry } from '../../store/actions/fetchTelemetry';
 import { dispatchSceneEvent, selectActiveScene } from '../../store/slices/sceneSlice';
+import { selectMapVesselPlacement } from '../../store/selectors/telemetrySelectors';
 import {
     revealGlobalAroundPosition,
     resetDiscovery,
+    resizeDiscoveryGrid,
     bulkPromoteObstacles,
     revealAllKnownCells,
 } from '../../store/slices/discoveredGridSlice';
-import { CellTypes, GLOBAL_GRID_SIZE, GLOBAL_CELL_SIZE, LOCAL_CELL_SIZE, LOCAL_GRID_WORLD_SIZE } from '../../types';
+import {
+    CellTypes,
+    GLOBAL_CELL_SIZE,
+    LOCAL_CELL_SIZE,
+    LOCAL_GRID_WORLD_SIZE,
+    gridMetrics,
+    dimsOfGrid,
+    type Grid as OccupancyGridType,
+} from '../../types';
+
+/** Stable empty grid, so the "no terrain while live" path doesn't churn identity each render. */
+const EMPTY_FINE_GRID: OccupancyGridType = [];
 
 import { SceneCanvas } from './SceneCanvas';
 import { Legend } from '../controls/Legend';
@@ -54,9 +68,42 @@ export default function MappingScene() {
     const { speed, heading } = useAppSelector((state: RootState) => state.telemetry.asv);
     const connectionStatus = useAppSelector((state: RootState) => state.connection.status);
     const isConnected = connectionStatus === 'connected';
-    const fineGrid = useAppSelector((state: RootState) => state.simulation.fineGrid);
+    const rawFineGrid = useAppSelector((state: RootState) => state.simulation.fineGrid);
     const occupancyGrid = useAppSelector((state: RootState) => state.telemetry.map.occupancyGrid);
+    const mapInfo = useAppSelector((state: RootState) => state.telemetry.map.info);
     const autoSimActive = !isConnected && simMode === 'automatic';
+
+
+    const [_,setIsToroidal] = React.useState(false);
+
+    React.useEffect(() => {
+        setIsToroidal(isConnected);
+    }, [isConnected]);
+
+    // The board is whatever the basestation actually sent, not a hardcoded 20x20.
+    // `gridMetrics` guards the empty-grid case so these stay sane before the first payload.
+    const gridDims = React.useMemo(() => dimsOfGrid(occupancyGrid), [occupancyGrid]);
+    const { cols: gridCols, rows: gridRows, halfSpanX, halfSpanY } = React.useMemo(
+        () => gridMetrics(gridDims),
+        [gridDims],
+    );
+
+    /**
+     * Where the vessel actually is on the SLAM map, converted to engine cells. Null in
+     * mock/sim (the scene drives itself) and null while connected without a usable TF
+     * pose, which is what `status === 'no-pose'` reports.
+     */
+    const placement = useAppSelector(selectMapVesselPlacement);
+    const poseCell = placement.cell;
+
+    /**
+     * `fineGrid` is produced only by the client-side mock factory — the basestation has
+     * never sent one. Reusing it while connected drew fabricated terrain under a live
+     * vessel and, worse, permanently promoted those invented obstacles into
+     * `obstacleOverrides`, which the overlay ORs into the real occupancy map. Live
+     * sessions therefore get no local terrain at all until there is a real source for it.
+     */
+    const fineGrid = isConnected ? EMPTY_FINE_GRID : rawFineGrid;
 
     // Joystick state — only active in manual sim mode
     const VELOCITY_MAX = 2.0;
@@ -105,14 +152,28 @@ export default function MappingScene() {
 
     const mappingPaused = !isConnected && !autoSimActive && activeSceneId !== 'mapping';
 
+    // Dead reckoning is now a SIMULATION-ONLY concern. While connected the vessel comes
+    // from the bridge's map-frame TF pose, so the physics loop is fed zero velocity and
+    // stops stepping entirely (`useEnginePhysics` early-returns on zero).
+    //
+    // This is also why the old metres-per-second to cells-per-second conversion is gone:
+    // it existed purely to make live dead reckoning less wrong, and live no longer dead
+    // reckons at all. In sim, `speed` is already in cells and always was.
     const { globalX: manualX, globalY: manualY, setGlobalX, setGlobalY } = useEnginePhysics(
-        autoSimActive ? 0 : mappingPaused ? 0 : speed,
+        isConnected || autoSimActive || mappingPaused ? 0 : speed,
         heading,
+        gridDims,
+        !isConnected,
     );
     const { autoX, autoY, autoHeading } = useAutoPathAnimation(autoSimActive, 2.0);
 
-    const globalX = autoSimActive ? autoX : manualX;
-    const globalY = autoSimActive ? autoY : manualY;
+    const globalX = poseCell ? poseCell.x : autoSimActive ? autoX : manualX;
+    const globalY = poseCell ? poseCell.y : autoSimActive ? autoY : manualY;
+
+    // Heading likewise: the pose's heading is the one expressed in the map's own frame,
+    // so it is what keeps the bow consistent with the obstacles around it. `asv.heading`
+    // is the GPS/compass bearing, which is a different frame and only used off-map.
+    const headingOverride = placement.heading ?? (autoSimActive ? autoHeading : undefined);
 
     // Sync manual position to auto position when leaving auto mode so there's no jump.
     const prevAutoSimRef = React.useRef(autoSimActive);
@@ -140,7 +201,7 @@ export default function MappingScene() {
             pendingAutoClearRef.current = false;
             pendingAutoClearPosRef.current = null;
             lastPointRef.current = null;
-            dispatch(clearCourseTrail());
+            dispatch(clearSceneTrail());
             dispatch(regenerateMockTelemetry());
         }
     }, [connectionStatus, dispatch]);
@@ -150,12 +211,17 @@ export default function MappingScene() {
         pendingAutoClearRef.current = false;
         pendingAutoClearPosRef.current = null;
         lastPointRef.current = null;
-        dispatch(clearCourseTrail());
+        dispatch(clearSceneTrail());
     }, [dispatch, simMode]);
 
-    // Sample the vessel's position and append to the course trail when moving. Clear the trail if the vessel jumps far away.
+    // Sample the vessel's position into the scene's own cell-space trail as it moves, and
+    // break the line rather than draw across the map when it jumps.
+    //
+    // This used to bail out entirely while connected, because the only position available
+    // then was dead-reckoned fiction not worth recording. Now that live mode has a real
+    // map-frame pose, the trail is the vessel's actual track over the survey.
     React.useEffect(() => {
-        if (isConnected) return;
+        if (isConnected && !poseCell) return;
         if (autoSimActive && plan.length === 0) return;
 
         if (pendingAutoClearRef.current) {
@@ -164,24 +230,28 @@ export default function MappingScene() {
                 pendingAutoClearRef.current = false;
                 pendingAutoClearPosRef.current = null;
                 lastPointRef.current = { x: globalX, y: globalY };
-                dispatch(clearCourseTrail());
-                dispatch(appendCourseTrailPoint({ x: globalX, y: globalY, heading: 0 }));
+                dispatch(clearSceneTrail());
+                dispatch(appendSceneTrailPoint({ x: globalX, y: globalY }));
             }
             return;
         }
 
         const prev = lastPointRef.current;
         const SAMPLE_DIST = 0.3;
-        const WRAP_DIST = 5.0;
+        // Originally a toroidal-wrap detector. Live mode does not wrap, but the threshold
+        // still earns its place: SLAM loop closure re-localises the vessel in one step,
+        // and that discontinuity should break the trail rather than be drawn as a stroke
+        // straight across the map.
+        const TELEPORT_DIST = 5.0;
         const dist = prev !== null ? Math.hypot(globalX - prev.x, globalY - prev.y) : 0;
 
-        if (prev !== null && dist >= WRAP_DIST) {
+        if (prev !== null && dist >= TELEPORT_DIST) {
             lastPointRef.current = { x: globalX, y: globalY };
-            dispatch(clearCourseTrail());
-            dispatch(appendCourseTrailPoint({ x: globalX, y: globalY, heading: 0 }));
+            dispatch(clearSceneTrail());
+            dispatch(appendSceneTrailPoint({ x: globalX, y: globalY }));
         } else if (prev === null || dist >= SAMPLE_DIST) {
             lastPointRef.current = { x: globalX, y: globalY };
-            dispatch(appendCourseTrailPoint({ x: globalX, y: globalY, heading: 0 }));
+            dispatch(appendSceneTrailPoint({ x: globalX, y: globalY }));
         }
     }, [globalX, globalY]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -192,8 +262,8 @@ export default function MappingScene() {
     React.useEffect(() => {
         const objectiveCell = plan[plan.length - 1];
         if (!objectiveCell) return;
-        const col = Math.floor(globalX + GLOBAL_GRID_SIZE / 2);
-        const row = Math.floor(globalY + GLOBAL_GRID_SIZE / 2);
+        const col = Math.floor(globalX + gridCols / 2);
+        const row = Math.floor(globalY + gridRows / 2);
         if (col === objectiveCell.x && row === objectiveCell.y) {
             if (!atObjectiveRef.current) {
                 atObjectiveRef.current = true;
@@ -203,7 +273,7 @@ export default function MappingScene() {
                     pendingAutoClearPosRef.current = { x: globalX, y: globalY };
                 } else {
                     lastPointRef.current = null;
-                    dispatch(clearCourseTrail());
+                    dispatch(clearSceneTrail());
                     dispatch(regenerateMockTelemetry());
                 }
             }
@@ -217,12 +287,24 @@ export default function MappingScene() {
     // map center before the vessel has actually traveled there. React runs effects in
     // definition order, so this fires before the reveal effect below when fineGrid changes.
     const lastFogCellRef = React.useRef<{ col: number; row: number } | null>(null);
-    const fineOffset = (GLOBAL_GRID_SIZE / 2) * GLOBAL_CELL_SIZE; // 400 world units
+
+    // Keep the fog grid the same shape as the map, and drop the trail with it. Dispatching
+    // every payload is safe — the reducer no-ops unless the dimensions actually changed.
+    //
+    // The trail is cleared for the same reason discovery state is: its points are cell
+    // coordinates, and a differently-sized board puts those cells over a different piece
+    // of the world. Carrying them across would draw a track the vessel never took.
+    React.useEffect(() => {
+        dispatch(resizeDiscoveryGrid({ cols: gridCols, rows: gridRows }));
+        lastPointRef.current = null;
+        dispatch(clearSceneTrail());
+    }, [gridCols, gridRows, dispatch]);
+
     React.useEffect(() => {
         if (fineGrid.length === 0) return;
         lastFogCellRef.current = {
-            col: Math.floor(globalX + GLOBAL_GRID_SIZE / 2),
-            row: Math.floor(globalY + GLOBAL_GRID_SIZE / 2),
+            col: Math.floor(globalX + gridCols / 2),
+            row: Math.floor(globalY + gridRows / 2),
         };
     }, [fineGrid]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -230,8 +312,8 @@ export default function MappingScene() {
     React.useEffect(() => {
         if (fineGrid.length === 0) return;
 
-        const gCol = Math.floor(globalX + GLOBAL_GRID_SIZE / 2);
-        const gRow = Math.floor(globalY + GLOBAL_GRID_SIZE / 2);
+        const gCol = Math.floor(globalX + gridCols / 2);
+        const gRow = Math.floor(globalY + gridRows / 2);
         const last = lastFogCellRef.current;
 
         // Skip if position hasn't changed (includes the initial load position captured above).
@@ -246,21 +328,21 @@ export default function MappingScene() {
         const worldCX = globalX * GLOBAL_CELL_SIZE;
         const worldCY = globalY * GLOBAL_CELL_SIZE;
         const half = LOCAL_GRID_WORLD_SIZE / 2; // 60 px
-        const cMin = Math.max(0, Math.floor((worldCX - half + fineOffset) / GLOBAL_CELL_SIZE));
-        const cMax = Math.min(GLOBAL_GRID_SIZE - 1, Math.floor((worldCX + half + fineOffset) / GLOBAL_CELL_SIZE));
-        const rMin = Math.max(0, Math.floor((worldCY - half + fineOffset) / GLOBAL_CELL_SIZE));
-        const rMax = Math.min(GLOBAL_GRID_SIZE - 1, Math.floor((worldCY + half + fineOffset) / GLOBAL_CELL_SIZE));
+        const cMin = Math.max(0, Math.floor((worldCX - half + halfSpanX) / GLOBAL_CELL_SIZE));
+        const cMax = Math.min(gridCols - 1, Math.floor((worldCX + half + halfSpanX) / GLOBAL_CELL_SIZE));
+        const rMin = Math.max(0, Math.floor((worldCY - half + halfSpanY) / GLOBAL_CELL_SIZE));
+        const rMax = Math.min(gridRows - 1, Math.floor((worldCY + half + halfSpanY) / GLOBAL_CELL_SIZE));
 
         const promoteCols: number[] = [];
         const promoteRows: number[] = [];
         for (let nr = rMin; nr <= rMax; nr++) {
             for (let nc = cMin; nc <= cMax; nc++) {
-                const worldXMin = (nc - GLOBAL_GRID_SIZE / 2) * GLOBAL_CELL_SIZE;
-                const worldYMin = (nr - GLOBAL_GRID_SIZE / 2) * GLOBAL_CELL_SIZE;
-                const fColStart = Math.max(0, Math.floor((worldXMin + fineOffset) / LOCAL_CELL_SIZE));
-                const fRowStart = Math.max(0, Math.floor((worldYMin + fineOffset) / LOCAL_CELL_SIZE));
-                const fColEnd   = Math.min(fineGrid[0]?.length ?? 0, Math.ceil((worldXMin + GLOBAL_CELL_SIZE + fineOffset) / LOCAL_CELL_SIZE));
-                const fRowEnd   = Math.min(fineGrid.length,           Math.ceil((worldYMin + GLOBAL_CELL_SIZE + fineOffset) / LOCAL_CELL_SIZE));
+                const worldXMin = (nc - gridCols / 2) * GLOBAL_CELL_SIZE;
+                const worldYMin = (nr - gridRows / 2) * GLOBAL_CELL_SIZE;
+                const fColStart = Math.max(0, Math.floor((worldXMin + halfSpanX) / LOCAL_CELL_SIZE));
+                const fRowStart = Math.max(0, Math.floor((worldYMin + halfSpanY) / LOCAL_CELL_SIZE));
+                const fColEnd   = Math.min(fineGrid[0]?.length ?? 0, Math.ceil((worldXMin + GLOBAL_CELL_SIZE + halfSpanX) / LOCAL_CELL_SIZE));
+                const fRowEnd   = Math.min(fineGrid.length,           Math.ceil((worldYMin + GLOBAL_CELL_SIZE + halfSpanY) / LOCAL_CELL_SIZE));
 
                 let hasObstacle = false;
                 outer: for (let fi = fRowStart; fi < fRowEnd; fi++) {
@@ -282,22 +364,33 @@ export default function MappingScene() {
         }
     }, [globalX, globalY, fineGrid, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Live mode: immediately reveal all cells the basestation knows about.
-    // Unknown cells (absent from occupancyGrid) remain hidden behind fog.
+    // Live mode: reveal every cell the basestation has actually surveyed.
+    //
+    // This used to submit only cells with `type !== empty` — i.e. obstacles alone — so
+    // known-clear water was never revealed and a live map rendered as a black field with a
+    // few red tiles floating in it. A cell present in the occupancy grid is *surveyed*
+    // whether or not something is in it; "empty" means known-and-clear, not unknown. The
+    // bridge deliberately leaves genuinely-unknown source cells (OccupancyGrid's -1) out of
+    // the occupied set, so honouring every present cell here is what makes fog mean
+    // "not yet mapped" rather than "no obstacle".
     React.useEffect(() => {
         if (!isConnected) return;
         const cols: number[] = [];
         const rows: number[] = [];
+        const knownMask = mapInfo?.known;
         occupancyGrid.forEach((gridRow, ri) => {
             gridRow.forEach((cell, ci) => {
-                if (cell.type !== undefined && cell.type !== CellTypes.empty) {
-                    cols.push(ci);
-                    rows.push(ri);
-                }
+                if (!cell) return;
+                // With a mask, reveal only what SLAM has observed. Without one the
+                // producer has no notion of unknown (the factory's map is wholly
+                // surveyed), so every cell present counts as seen.
+                if (knownMask && !knownMask[ri * gridCols + ci]) return;
+                cols.push(ci);
+                rows.push(ri);
             });
         });
         if (cols.length > 0) dispatch(revealAllKnownCells({ cols, rows }));
-    }, [occupancyGrid, isConnected, dispatch]);
+    }, [occupancyGrid, mapInfo, gridCols, isConnected, dispatch]);
 
     /**
      * @constant handleRegenerateMap
@@ -311,7 +404,7 @@ export default function MappingScene() {
         pendingAutoClearPosRef.current = null;
         lastPointRef.current = null;
         dispatch(regenerateMockTelemetry());
-        dispatch(clearCourseTrail());
+        dispatch(clearSceneTrail());
         dispatch(resetDiscovery());
         dispatch(dispatchSceneEvent({ type: 'MAP_REGENERATED', sceneId: 'mapping' }));
     }, [dispatch]);
@@ -393,13 +486,15 @@ export default function MappingScene() {
                         globalY={globalY}
                         setGlobalX={setGlobalX}
                         setGlobalY={setGlobalY}
-                        autoHeading={autoSimActive ? autoHeading : undefined}
+                        headingOverride={headingOverride}
+                        showVessel={placement.status !== 'no-pose'}
                         isDesktopMode={isDesktopMode}
                         isFullscreen={isFullscreen}
                         isMobile={isMobile}
                         onToggleFullscreen={toggleFullscreen}
                         onRegenerateMap={handleRegenerateMap}
                         joystickProps={joystickProps}
+                        toroidal={isTorodial}
                     >
                         <SceneHUD.Tabs />
                         <SceneHUD.StatusBadges />

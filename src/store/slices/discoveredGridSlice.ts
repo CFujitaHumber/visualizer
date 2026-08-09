@@ -118,17 +118,47 @@ export const discoveredGridSlice = createSlice({
         },
 
         /**
+         * Resizes the discovery grid to match an incoming map, clearing all discovery state.
+         *
+         * @remarks
+         * The grid used to be pinned to GLOBAL_GRID_SIZE at module load, so any basestation
+         * map that wasn't 20x20 could not be represented — the flat arrays were the wrong
+         * length and every index was read with the wrong stride. Discovery state is
+         * intentionally dropped rather than remapped: cell (3,4) of a 20x20 map is a
+         * different piece of the world than cell (3,4) of an 87x53 one, so carrying the old
+         * state across would assert the vessel had seen places it never visited.
+         *
+         * A no-op when the dimensions already match, so this can be dispatched on every
+         * payload without wiping the fog the moment anything moves.
+         */
+        resizeDiscoveryGrid(state, action: PayloadAction<{ cols: number; rows: number }>) {
+            const cols = Math.max(1, Math.floor(action.payload.cols));
+            const rows = Math.max(1, Math.floor(action.payload.rows));
+            if (cols === state.gridWidth && rows === state.gridHeight) return;
+
+            state.gridWidth = cols;
+            state.gridHeight = rows;
+            state.cells = Array<DiscoveryCellState>(cols * rows).fill(0);
+            state.obstacleOverrides = Array<boolean>(cols * rows).fill(false);
+            state.visibleIndices = [];
+        },
+
+        /**
          * Mark global cells as having a confirmed obstacle from the fineGrid sensor scan.
          * Permanent — survives until resetDiscovery is called.
          */
         bulkPromoteObstacles(state, action: PayloadAction<{ cols: number[]; rows: number[] }>) {
             const { cols, rows } = action.payload;
             const W = state.gridWidth;
+            const H = state.gridHeight;
             for (let i = 0; i < cols.length; i++) {
-                const idx = rows[i] * W + cols[i];
-                if (idx >= 0 && idx < state.obstacleOverrides.length) {
-                    state.obstacleOverrides[idx] = true;
-                }
+                const col = cols[i];
+                const row = rows[i];
+                // Bound each axis, not just the flat index: an out-of-range column with an
+                // in-range flat index silently aliases into the *next row*, painting
+                // obstacles onto cells that never had one.
+                if (col < 0 || col >= W || row < 0 || row >= H) continue;
+                state.obstacleOverrides[row * W + col] = true;
             }
         },
 
@@ -139,11 +169,13 @@ export const discoveredGridSlice = createSlice({
         revealAllKnownCells(state, action: PayloadAction<{ cols: number[]; rows: number[] }>) {
             const { cols, rows } = action.payload;
             const W = state.gridWidth;
+            const H = state.gridHeight;
             for (let i = 0; i < cols.length; i++) {
-                const idx = rows[i] * W + cols[i];
-                if (idx >= 0 && idx < state.cells.length && state.cells[idx] === 0) {
-                    state.cells[idx] = 1;
-                }
+                const col = cols[i];
+                const row = rows[i];
+                if (col < 0 || col >= W || row < 0 || row >= H) continue;
+                const idx = row * W + col;
+                if (state.cells[idx] === 0) state.cells[idx] = 1;
             }
         },
 
@@ -162,6 +194,7 @@ export const discoveredGridSlice = createSlice({
 
 export const {
     revealGlobalAroundPosition,
+    resizeDiscoveryGrid,
     bulkPromoteObstacles,
     revealAllKnownCells,
     resetDiscovery,

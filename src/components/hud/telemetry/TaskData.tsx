@@ -45,10 +45,23 @@ function DataRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function TaskData() {
-	const theme = useTheme();	
+	const theme = useTheme();
 	const taskData = useSelector((state: RootState) => state.telemetry.task.data);
 	const zed = useSelector((state: RootState) => state.telemetry.zed);
 	const topics = useSelector((state: RootState) => state.telemetry.system.topics);
+	const frameRate = useSelector((state: RootState) => state.connection.frameRate);
+	const framesReceived = useSelector((state: RootState) => state.connection.framesReceived);
+	const isConnected = useSelector((state: RootState) => state.connection.status === 'connected');
+
+	// null means "no socket / not measurable yet" and is shown as a dash. Zero means the
+	// socket is open but nothing is coming down it, which is a fault worth colouring.
+	const feedColor = !isConnected || frameRate === null
+		? theme.palette.telemetry?.text.secondary
+		: frameRate < 1
+			? theme.palette.error.main
+			: frameRate < 4
+				? theme.palette.warning.main
+				: theme.palette.success.main;
 
 	const getStatusColor = (status: string | undefined) => {
 		switch (status) {
@@ -108,6 +121,18 @@ export default function TaskData() {
 					No task data
 				</Typography>
 			)}
+
+			{/* Data feed — telemetry frames arriving from the basestation. */}
+			{sectionLabel("Data Feed")}
+			<Box sx={{ display: "flex", gap: "4px", alignItems: "baseline" }}>
+				<Typography sx={{ fontSize: "9px", color: theme.palette.telemetry?.text.secondary, minWidth: 60 }}>
+					rate
+				</Typography>
+				<Typography sx={{ fontSize: "10px", color: feedColor, fontFamily: "monospace", fontWeight: "bold" }}>
+					{isConnected && frameRate !== null ? `${frameRate.toFixed(1)} f/s` : "—"}
+				</Typography>
+			</Box>
+			<DataRow label="frames" value={isConnected ? framesReceived.toLocaleString() : "—"} />
 
 			{/* ZED Odometry */}
 			{sectionLabel("ZED Odometry")}

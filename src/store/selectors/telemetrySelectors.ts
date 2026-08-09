@@ -62,3 +62,64 @@ export const selectZedObjectsWorld = createSelector(
             position: projectBoatRelative(obj.position, heading, anchor),
         })),
 );
+
+const selectMapInfo = (state: RootState) => state.telemetry.map.info;
+const selectVesselPose = (state: RootState) => state.telemetry.map.vesselPose;
+const selectIsConnected = (state: RootState) => state.connection.status === 'connected';
+
+/**
+ * How the isometric scene should place the vessel.
+ *
+ * @remarks
+ * `'offline'` — mock or simulation: the scene drives the vessel itself, so no cell here.
+ * `'live'` — a real map-frame pose is available and `cell` is where to draw it.
+ * `'no-pose'` — connected, but the bridge has no usable `map -> base_link` transform.
+ *   The vessel must NOT be drawn: the alternative is dead reckoning from the board's
+ *   centre, which is exactly the fiction this replaced, and it is at its most misleading
+ *   sitting on top of genuine SLAM obstacles.
+ */
+export type MapVesselPlacement = {
+    /** Position in engine grid cells (centre-origin), or null when there is nothing real to draw. */
+    cell: { x: number; y: number } | null;
+    /** Compass degrees from the pose, or null — callers fall back to their own heading source. */
+    heading: number | null;
+    status: 'live' | 'no-pose' | 'offline';
+};
+
+/**
+ * Converts the bridge's map-frame pose into the engine's grid-cell coordinates.
+ *
+ * @remarks
+ * The conversion lives in exactly one place because it encodes a frame convention that is
+ * easy to invert silently: the board is north-up, so `+row` is map `-y` (see
+ * {@link MapInfo.origin}). Scene and HUD both read this, so they cannot end up disagreeing
+ * about whether a pose is usable.
+ *
+ * Engine cells are centre-origin — (0,0) is the middle of the board, not a corner — hence
+ * the half-span subtraction at the end.
+ */
+export const selectMapVesselPlacement = createSelector(
+    [selectIsConnected, selectVesselPose, selectMapInfo],
+    (isConnected, pose, info): MapVesselPlacement => {
+        if (!isConnected) return { cell: null, heading: null, status: 'offline' };
+
+        // A zero/absent resolution means the map metadata is unusable, not that the cells
+        // are 0 m across — dividing by it would place the vessel at infinity.
+        if (!pose || !info || !(info.resolution > 0)) {
+            return { cell: null, heading: null, status: 'no-pose' };
+        }
+
+        const col = (pose.x - info.origin.x) / info.resolution;
+        const row = (info.origin.y - pose.y) / info.resolution;
+
+        if (!Number.isFinite(col) || !Number.isFinite(row)) {
+            return { cell: null, heading: null, status: 'no-pose' };
+        }
+
+        return {
+            cell: { x: col - info.cols / 2, y: row - info.rows / 2 },
+            heading: pose.heading,
+            status: 'live',
+        };
+    },
+);

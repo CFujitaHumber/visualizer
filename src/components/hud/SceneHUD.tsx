@@ -27,6 +27,7 @@ import GpsNotFixedIcon from '@mui/icons-material/GpsNotFixed';
 import { useAppSelector, useAppDispatch } from '../../store';
 import { setSimMode } from '../../store/slices/simulationSlice';
 import { setActiveScene, selectActiveTabIndex, selectActiveScene, selectRegisteredScenes } from '../../store/slices/sceneSlice';
+import { selectMapVesselPlacement } from '../../store/selectors/telemetrySelectors';
 import { useSceneContext } from '../../hooks/useSceneContext';
 import { Legend } from '../controls/Legend';
 import { InfoPopover } from '../controls/InfoPopover';
@@ -112,6 +113,7 @@ export function StatusBadges(): JSX.Element {
     const dispatch = useAppDispatch();
     const connectionStatus = useAppSelector(state => state.connection.status);
     const simMode = useAppSelector(state => state.simulation.simMode);
+    const placement = useAppSelector(selectMapVesselPlacement);
     const { isDesktopMode } = useSceneContext();
 
     const isConnected = connectionStatus === 'connected';
@@ -172,6 +174,26 @@ export function StatusBadges(): JSX.Element {
                     >
                         {autoSimActive ? 'AUTO' : 'MAN'}
                     </Button>
+                </Tooltip>
+            )}
+            {placement.status === 'no-pose' && (
+                <Tooltip
+                    title="The basestation has no map -> base_link transform, so the vessel's position on the SLAM map is unknown. The map and obstacles are still live; only the boat is hidden."
+                    placement="right"
+                >
+                    <Chip
+                        size="small"
+                        label="NO MAP POSE"
+                        sx={{
+                            bgcolor: alpha(theme.palette.warning.main, 0.15),
+                            color: theme.palette.warning.main,
+                            border: `1px solid ${theme.palette.warning.main}`,
+                            fontSize: '0.6rem',
+                            fontWeight: 800,
+                            height: 20,
+                            letterSpacing: '0.06em',
+                        }}
+                    />
                 </Tooltip>
             )}
         </Stack>

@@ -20,6 +20,7 @@ import type { TelemetryActionTypes } from '../../types/telemetryInterfaces';
 import type { Status as TelemetryState } from '../../types';
 import type { AppDispatch, RootState } from '../store';
 import { SET_STATUS, clearFrameOrigin, clearCourseTrail } from '../slices/telemetrySlice';
+import { clearSceneTrail } from '../slices/sceneTrailSlice';
 import { setFineGrid } from '../slices/simulationSlice';
 import { setVideoStreamUrl } from '../slices/videoSlice';
 /**
@@ -153,7 +154,10 @@ export const regenerateMockTelemetry = () => {
         // A regenerated world is a genuinely new frame — drop the latched origin so it
         // re-anchors on the new starting fix instead of measuring from the old one.
         dispatch(clearFrameOrigin());
+        // Both trails: a regenerated world invalidates the tactical maps' metres track and
+        // the isometric scene's cell track alike.
         dispatch(clearCourseTrail());
+        dispatch(clearSceneTrail());
         dispatch(fetchTelemetrySuccess(status));
         dispatch(setFineGrid(fineGrid));
         dispatch(setVideoStreamUrl(generateMockVideoUrl()));

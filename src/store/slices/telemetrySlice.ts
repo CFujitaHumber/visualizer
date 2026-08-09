@@ -87,10 +87,12 @@ const mergeChangedLeaves = (target: Record<string, unknown>, incoming: Record<st
  *
  * - `frame` is client-only (see {@link Frame}); a stray one must not clobber a
  *   latched origin mid-session.
- * - `map.courseTrail` is built client-side by TacticalMapPanel. The basestation
- *   sends `courseTrail: []` in every payload because its default state declares
- *   the key, so honouring it wiped the accumulated trail ~7x/second and the
- *   course line could never survive longer than one socket frame.
+ * - `map.courseTrail` is built client-side by TacticalMapPanel, in METRES. The
+ *   basestation sends `courseTrail: []` in every payload because its default state
+ *   declares the key, so honouring it wiped the accumulated trail ~7x/second and the
+ *   course line could never survive longer than one socket frame. The isometric
+ *   scene keeps its own trail in grid cells — see `sceneTrailSlice` for why the two
+ *   cannot share this array.
  */
 const applyIncomingStatus = (state: Status, payload: Partial<Status>): void => {
     const { frame: _frame, map: incomingMap, ...rest } = payload;

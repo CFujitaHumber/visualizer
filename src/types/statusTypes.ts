@@ -12,11 +12,97 @@ import type { TaskData, TaskLocation, TaskStatus } from "./taskTypes";
 import { TaskValues } from "./taskTypes";
 import type { DetectedObject } from "./detectedObjectsTypes";
 
+/**
+ * A point on the tactical map's course trail, in **metres** in the GPS-derived local
+ * tangent-plane frame (see {@link Frame}).
+ *
+ * @remarks
+ * The unit matters and used to be ambiguous. `map.courseTrail` had two writers in two
+ * different units — `TacticalMapPanel` in metres and the isometric scene in grid cells —
+ * and three readers that each assumed one or the other, so whichever component moved last
+ * decided what the shared array meant. The isometric scene now keeps its own cell-space
+ * trail in `sceneTrailSlice`; this one is metres, and belongs to the tactical maps.
+ */
 type CourseTrailPoint = {
     x: number;
     y: number;
     /** ASV heading in degrees at this trail point. */
     heading: number;
+};
+
+/**
+ * The vessel's pose on the SLAM map, as resolved by the bridge from the
+ * `map -> base_link` TF.
+ *
+ * @remarks
+ * This is the only honest source of where the boat is on `occupancyGrid`. GPS is in a
+ * different frame entirely (loone's config keeps `gps_map` deliberately distinct from
+ * SLAM's `map`), and `zed.odom` is the camera's own drifting visual-odometry frame with
+ * no loop closure — neither can be placed on the map's cells. Before this existed the
+ * isometric scene dead-reckoned the vessel from speed and heading starting at the board's
+ * centre, which drew fiction on top of real obstacle data.
+ *
+ * `null` is meaningful and distinct from absent: it is the bridge reporting that TF has
+ * gone stale, and consumers must stop drawing the vessel rather than freeze it in place.
+ */
+type VesselPose = {
+    /** Map-frame metres east, in the same frame as {@link MapInfo.origin}. */
+    x: number;
+    /** Map-frame metres north, in the same frame as {@link MapInfo.origin}. */
+    y: number;
+    /**
+     * Compass heading in degrees (0 = north, 90 = east). Converted by the bridge from
+     * the transform's ENU yaw, so the client never has to know which convention the
+     * map frame uses.
+     */
+    heading: number;
+};
+
+/**
+ * Describes the real-world meaning of `map.occupancyGrid`, derived from
+ * `nav_msgs/OccupancyGrid.info` by the bridge.
+ *
+ * @remarks
+ * Without this the client has no idea what one grid cell is worth, which is why the
+ * isometric scene used to treat the vessel's metres-per-second as cells-per-second. The
+ * grid the client receives is a downsample of the SLAM map, so `resolution` is the
+ * *coarsened* value (metres per rendered cell), not the source map's.
+ */
+type MapInfo = {
+    /** Rendered grid width in cells — matches `occupancyGrid[0].length`. */
+    cols: number;
+    /** Rendered grid height in cells — matches `occupancyGrid.length`. */
+    rows: number;
+    /** Metres per rendered cell, after downsampling. */
+    resolution: number;
+    /**
+     * Map-frame position, in metres, of the board's (0,0) corner — its **north-west**
+     * corner.
+     *
+     * @remarks
+     * The board is emitted north-up: `+col` is map `+x` (east) and `+row` is map `-y`
+     * (south). That is *not* `nav_msgs/OccupancyGrid`'s own layout, which is row-major
+     * from its south-west origin; the bridge flips the rows because the isometric engine
+     * draws increasing row toward screen `+y` and treats `-y` as north (its physics
+     * integrates heading 0 as `dy = -v`). Passing the rows through unflipped rendered the
+     * live map upside-down, which went unnoticed only for as long as nothing real was
+     * positioned on it.
+     *
+     * So a map-frame point converts to board cells as:
+     * `col = (x - origin.x) / resolution`, `row = (origin.y - y) / resolution`.
+     */
+    origin: { x: number; y: number };
+    /**
+     * Flat row-major mask of cells SLAM has actually observed, `row * cols + col`.
+     *
+     * Downsampling collapses OccupancyGrid's -1 (unknown) and 0 (known-clear) into the
+     * same empty cell, so the grid alone cannot distinguish unsurveyed water from open
+     * water. Fog-of-war needs that distinction or it either hides known-clear cells or
+     * reveals the whole map at once. Omitted by producers with no notion of unknown
+     * (the factory's synthetic map is wholly surveyed), in which case treat all cells
+     * present in the grid as known.
+     */
+    known?: boolean[];
 };
 
 type ZedPosition = { x: number; y: number; z: number };
@@ -69,7 +155,22 @@ type Status = {
         navigationGrid: Grid;
         // The basestation doesn't send this either — built client-side instead, in
         // TacticalMapPanel, from the GPS-derived local-meters frame + asv.heading.
+        // METRES, and tactical-map-owned: the isometric scene keeps its own cell-space
+        // trail in sceneTrailSlice. See {@link CourseTrailPoint}.
         courseTrail: CourseTrailPoint[];
+        /**
+         * Metadata describing what `occupancyGrid` actually represents. Absent until the
+         * bridge has received a `/map`, which is why every consumer must tolerate it being
+         * undefined rather than assuming a scale.
+         */
+        info?: MapInfo;
+        /**
+         * Where the vessel actually is on `occupancyGrid`. Absent before the bridge has
+         * looked TF up at all; explicitly `null` once TF has gone stale. See
+         * {@link VesselPose} — consumers must distinguish "no pose" from a last-known
+         * one and stop drawing the vessel rather than leave it frozen over live data.
+         */
+        vesselPose?: VesselPose | null;
     };
     planning: {
         status: TaskStatus;
@@ -187,5 +288,5 @@ const InitialStatus: Status = {
 // zed.odom.{position,orientation} are the ZED's own local visual-odometry frame and
 // are used as-is (not fused with GPS/compass). They are NOT the map frame — see {@link Frame}.
 
-export type { Status, CourseTrailPoint, Zed, ZedPosition, ZedOrientation, Frame };
+export type { Status, CourseTrailPoint, Zed, ZedPosition, ZedOrientation, Frame, MapInfo, VesselPose };
 export { InitialStatus };

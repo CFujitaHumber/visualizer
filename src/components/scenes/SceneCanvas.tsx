@@ -30,7 +30,9 @@ const ISO_SIN30 = Math.sin(Math.PI / 6);
  * @property {number} globalY - The global Y coordinate of the scene's origin.
  * @property {(x: number) => void} setGlobalX - Function to update the global X coordinate.
  * @property {(y: number) => void} setGlobalY - Function to update the global Y coordinate.
- * @property {number} [autoHeading] - Optional automatic heading angle for the scene view.
+ * @property {number} [headingOverride] - Heading to draw the vessel at, overriding `asv.heading`.
+ * @property {boolean} [showVessel] - Whether the vessel is drawn at all.
+ * @property {boolean} [toroidal] - Whether the world wraps at its edges. True (default) preserves the endless demo world; set false for a real occupancy grid, which has hard edges — see useWorldInstances .
  * @property {boolean} isDesktopMode - Indicates if the application is in desktop mode.
  * @property {boolean} isFullscreen - Indicates if the scene is currently in fullscreen mode.
  * @property {boolean} isMobile - Indicates if the application is running on a mobile device.
@@ -56,8 +58,17 @@ export interface SceneCanvasProps {
     globalY: number;
     setGlobalX: (x: number) => void;
     setGlobalY: (y: number) => void;
-    autoHeading?: number;
-
+    /**
+     * Heading to draw the vessel at, in compass degrees, overriding `asv.heading`.
+     * Supplied by the auto-path animation in sim, and by the map-frame TF pose when live —
+     * the latter matters because `asv.heading` is a GPS/compass bearing in a different
+     * frame from the map, so using it would point the bow inconsistently with the
+     * obstacles around it.
+     */
+    headingOverride?: number;
+    /** Whether the vessel is drawn. False when there is no trustworthy position for it. */
+    showVessel?: boolean;
+    toroidal: boolean;
     isDesktopMode: boolean;
     isFullscreen: boolean;
     isMobile: boolean;
@@ -114,7 +125,9 @@ export const SceneCanvas: React.FC<SceneCanvasProps> = ({
     globalY,
     setGlobalX,
     setGlobalY,
-    autoHeading,
+    headingOverride,
+    showVessel = true,
+    toroidal = true,
     isDesktopMode,
     isFullscreen,
     isMobile,
@@ -234,12 +247,14 @@ export const SceneCanvas: React.FC<SceneCanvasProps> = ({
                     offset={viewOffset}
                     preserveAspectRatio={isFullscreen ? 'xMidYMid slice' : undefined}
                     interactionProps={{}}
+                    showVessel={showVessel}
+                    toroidal={toroidal}
                     mappingData={{
                         globalX,
                         globalY,
                         setGlobalX,
                         setGlobalY,
-                        localRotationOverride: autoHeading,
+                        localRotationOverride: headingOverride,
                     }}
                 />
 

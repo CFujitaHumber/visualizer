@@ -22,6 +22,22 @@ export interface ConnectionState {
     status: ConnectionStatus;
     url: string;
     toast: ToastState;
+    /**
+     * Telemetry frames arriving from the basestation, in frames per second.
+     *
+     * @remarks
+     * `null` means "not measurable" — no live socket, or not enough frames seen yet to
+     * form an estimate. That is deliberately distinct from `0`, which means the socket is
+     * open but nothing is coming through it. Conflating the two would make a dead feed
+     * look like simulation mode.
+     *
+     * Only the WebSocket path feeds this. Mock/simulation updates are generated in-process
+     * and are not frames "from the basestation", so counting them would report a healthy
+     * rate for a basestation that isn't there.
+     */
+    frameRate: number | null;
+    /** Total frames received on the current socket. Resets whenever a new one opens. */
+    framesReceived: number;
 }
 
 const initialState: ConnectionState = {
@@ -30,6 +46,8 @@ const initialState: ConnectionState = {
     status: 'idle',
     url: '',
     toast: { open: false, message: '', severity: 'info' },
+    frameRate: null,
+    framesReceived: 0,
 };
 
 const connectionSlice = createSlice({
@@ -48,8 +66,33 @@ const connectionSlice = createSlice({
         dismissToast(state) {
             state.toast.open = false;
         },
+        /**
+         * Publishes a newly measured frame rate.
+         *
+         * @remarks
+         * Dispatched on a timer rather than per frame. The rate is measured where the
+         * frames land (`connectionActions`), not derived here, because a reducer has no
+         * clock — and pushing every arrival through the store just to count it would put
+         * an action on the wire ~10x/second for a number that only needs to move once.
+         */
+        setFrameRate(state, action: PayloadAction<{ rate: number | null; total: number }>) {
+            state.frameRate = action.payload.rate;
+            state.framesReceived = action.payload.total;
+        },
+        /** Clears the frame-rate measurement. Called whenever a socket opens or closes. */
+        resetFrameRate(state) {
+            state.frameRate = null;
+            state.framesReceived = 0;
+        },
     },
 });
 
-export const { setConnectionStatus, setConnectionUrl, showToast, dismissToast } = connectionSlice.actions;
+export const {
+    setConnectionStatus,
+    setConnectionUrl,
+    showToast,
+    dismissToast,
+    setFrameRate,
+    resetFrameRate,
+} = connectionSlice.actions;
 export default connectionSlice.reducer;
