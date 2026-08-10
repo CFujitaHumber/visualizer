@@ -82,8 +82,8 @@ const randomStep = (minStep: number, maxStep: number) => randomBetween(minStep, 
  */
 const createTaskData = (): TaskData => ({
     id: randomInt(1, 9999),
-    name: `Task ${randomInt(1, 99)}`,
-    status: randomChoice(Object.values(TaskValues)),
+    name: `Simulator`,
+    status: TaskValues.simulator,
     latitude: randomBetween(-90, 90),
     longitude: randomBetween(-180, 180),
 });
@@ -398,9 +398,10 @@ export function generateRandomState(): { status: Status; fineGrid: Grid } {
         rudder: {
             angle: randomBetween(-30, 30),
         },
+        // Signed thruster power: -100 full astern, 0 stopped, +100 full ahead.
         motors: {
-            left: randomBetween(35, 100),
-            right: randomBetween(35, 100),
+            left: randomBetween(-100, 100),
+            right: randomBetween(-100, 100),
         },
         asv: {
             speed: randomBetween(0, 5),
@@ -442,6 +443,7 @@ export function generateRandomState(): { status: Status; fineGrid: Grid } {
 }
 
 export function generateMockVideoUrl(): string {
+    // TODO(CARSON): make this not a random photo.
     return `https://picsum.photos/640/360?random=${randomInt(1, 9999)}`;
 }
 
@@ -499,9 +501,10 @@ export function generateMockStateUpdate(previous: Status, options: MockUpdateOpt
         rudder: {
             angle: clamp(previous.rudder.angle + randomStep(2, 7), -90, 90),
         },
+        // Signed — the walk is free to cross zero into astern.
         motors: {
-            left: clamp(previous.motors.left + randomStep(1, 6), 0, 100),
-            right: clamp(previous.motors.right + randomStep(1, 6), 0, 100),
+            left: clamp(previous.motors.left + randomStep(1, 6), -100, 100),
+            right: clamp(previous.motors.right + randomStep(1, 6), -100, 100),
         },
         task: {
             ...previous.task,

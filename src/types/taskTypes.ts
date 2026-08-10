@@ -52,7 +52,8 @@ const TaskValues = {
     remote: "remote",
     standby: "standby",
     lostConnection: "lost connection",
-    outOfControl: "out of control"
+    outOfControl: "out of control",
+    simulator: "simulated"
 }
 
 type TaskOptions = typeof TaskValues;

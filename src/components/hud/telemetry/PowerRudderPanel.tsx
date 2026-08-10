@@ -143,6 +143,9 @@ const RudderDisplay = ({ height, angle }: { height: number; angle: number }) => 
 
 export default function PowerRudderPanel() {
 	const theme = useTheme();
+	// NOTE: telemetry.motors is now a SIGNED percentage (-100 astern / 0 stopped / +100
+	// ahead). PowerBar below clamps to 0-100, so astern reads as 0% here. Deprecated in
+	// favour of ShipRudderVisualizer, which has centre-zero bars; not worth fixing.
 	const motor1Power = useSelector((state: RootState) => state.telemetry.motors.left);
 	const motor2Power = useSelector((state: RootState) => state.telemetry.motors.right);
 	const rudderAngle = useSelector((state: RootState) => state.telemetry.rudder.angle);

@@ -7,6 +7,10 @@
  * angle from `telemetry.rudder`. Follows the same panel pattern as the other
  * hud/telemetry components.
  *
+ * `telemetry.motors` is a SIGNED percentage (-100 astern / 0 stopped / +100
+ * ahead) — the basestation derives it from the propeller servo fractions, which
+ * are centred on 0.5. Passed straight through to the centre-zero bars.
+ *
  * @author Carson Fujita
  * @license MIT
  */

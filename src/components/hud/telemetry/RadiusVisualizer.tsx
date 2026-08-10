@@ -253,7 +253,7 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
 
                     {/* Obstacles (heading-up environment rotation) */}
                     {visible.map((obs) => (
-                        <ObstacleDot key={obs.id} cx={obs.cx} cy={obs.cy} color={obstacleColor} />
+                        <ObstacleDot key={obs.id} cx={obs.cx*30} cy={obs.cy*30} color={obstacleColor} />
                     ))}
 
                     {/* Cardinal markers, geographically true */}

@@ -403,7 +403,10 @@ export function generateMockStateUpdate(previous: Status): Status {
         }
     });
 
-    const targetPower = (newSpeed / MAX_SPEED) * 100;
+    // Thruster power is signed (-100 astern / 0 stopped / +100 ahead). This sim only
+    // ever drives forward, so it produces positive power; the clamp keeps it inside the
+    // contract when newSpeed overshoots MAX_SPEED.
+    const targetPower = clamp((newSpeed / MAX_SPEED) * 100, -100, 100);
     
     let newBattery = previous.battery.primary - (0.5 * dt);
     if (newBattery <= 0) newBattery = 100;

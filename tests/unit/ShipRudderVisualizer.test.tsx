@@ -41,9 +41,20 @@ describe('ShipRudderVisualizer', () => {
     expect(screen.getByText('RUDDER: -45°')).toBeInTheDocument();
   });
 
-  it('clamps power readouts to 0–100%', () => {
-    renderPanel({ portPower: 140, stbdPower: -20 });
+  it('clamps power readouts to ±100%', () => {
+    renderPanel({ portPower: 140, stbdPower: -140 });
     expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(screen.getByText('-100%')).toBeInTheDocument();
+  });
+
+  it('reports astern power as negative rather than flooring it at zero', () => {
+    renderPanel({ portPower: -40, stbdPower: 60 });
+    expect(screen.getByText('-40%')).toBeInTheDocument();
+    expect(screen.getByText('60%')).toBeInTheDocument();
+  });
+
+  it('shows a stopped thruster as 0%', () => {
+    renderPanel({ portPower: 0, stbdPower: 60 });
     expect(screen.getByText('0%')).toBeInTheDocument();
   });
 });

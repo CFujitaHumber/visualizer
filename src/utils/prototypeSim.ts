@@ -342,7 +342,10 @@ export function generateMockStateUpdate(previous: Status): Status {
 
     // Tie physics variables directly to the boat's actual movement instead of random noise!
     const targetRudder = (turnRate / (30 * dt)) * 30; 
-    const targetPower = (newSpeed / 8) * 100;
+    // Thruster power is signed (-100 astern / 0 stopped / +100 ahead). This sim only
+    // ever drives forward, so it produces positive power; the clamp keeps it inside the
+    // contract when newSpeed overshoots the 8 kn reference.
+    const targetPower = clamp((newSpeed / 8) * 100, -100, 100);
     
     // Battery drains slowly from 100 to 0, then resets to 100
     let newBattery = previous.battery.primary - (0.5 * dt);

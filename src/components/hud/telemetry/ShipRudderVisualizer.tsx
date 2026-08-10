@@ -8,16 +8,18 @@
  *   {@link ShipRudderVisualizerPanel} feeds it motor power and rudder angle.
  * - Power-bar heights, bar colors and rudder rotation are driven by
  *   @react-spring/web springs.
+ * - Thruster power is SIGNED: the bars fill from a centre detent, upward for
+ *   ahead and downward for astern, so reverse is distinguishable from idle.
  * - The rudder angle is clamped to ±`maxRudderDeg` (30° by default).
- * - Bar colors reuse the shared {@link getPowerColor} thresholds so this panel
- *   matches {@link PowerRudderPanel}; chrome colors come from the telemetry
- *   palette with graceful fallbacks.
+ * - Bar colors reuse the shared {@link getPowerColor} thresholds, applied to the
+ *   power's MAGNITUDE, so this panel matches {@link PowerRudderPanel}; chrome
+ *   colors come from the telemetry palette with graceful fallbacks.
  *
  * @author Carson Fujita
  * @license MIT
  *
  * @example
- * <ShipRudderVisualizer portPower={45} stbdPower={52} rudderAngle={-12} />
+ * <ShipRudderVisualizer portPower={45} stbdPower={-52} rudderAngle={-12} />
  */
 import React from 'react';
 import { Box, Typography, Tooltip, useTheme } from '@mui/material';
@@ -27,9 +29,9 @@ import { getPowerColor } from './powerColor';
 
 /** Properties for the {@link ShipRudderVisualizer} component. */
 export interface ShipRudderVisualizerProps {
-    /** Port (left) thruster power, 0–100%. */
+    /** Port (left) thruster power, -100–100% (negative = astern). */
     portPower: number;
-    /** Starboard (right) thruster power, 0–100%. */
+    /** Starboard (right) thruster power, -100–100% (negative = astern). */
     stbdPower: number;
     /** Rudder angle in degrees; positive = starboard. Clamped to ±maxRudderDeg. */
     rudderAngle: number;
@@ -44,19 +46,27 @@ const BAR_SPRING = { tension: 210, friction: 24 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-/** Vertical thruster power bar with sprung fill height and threshold color. */
+/**
+ * Vertical thruster power bar with a sprung centre-zero fill and threshold color.
+ *
+ * `power` is signed: 0 sits on the centre detent, ahead fills upward from it and
+ * astern fills downward, so a stopped thruster and a reversing one never look alike.
+ */
 const ThrusterBar: React.FC<{ label: string; power: number }> = ({ label, power }) => {
     const theme = useTheme();
     const telemetry = theme.palette.telemetry;
-    const clamped = clamp(power, 0, 100);
-    const color = getPowerColor(theme, clamped);
-    const spring = useSpring({ h: clamped, config: BAR_SPRING });
+    const textPrimary = telemetry?.text.primary ?? theme.palette.text.primary;
+    const clamped = clamp(power, -100, 100);
+    // getPowerColor's thresholds are magnitude-based, so full astern and full ahead
+    // share a color — the fill direction is what tells them apart.
+    const color = getPowerColor(theme, Math.abs(clamped));
+    const spring = useSpring({ v: clamped, config: BAR_SPRING });
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Typography
                 variant="caption"
-                sx={{ minWidth: '4ch', textAlign: 'center', fontSize: '10px', color, fontWeight: 700, mb: '3px' }}
+                sx={{ minWidth: '5ch', textAlign: 'center', fontSize: '10px', color, fontWeight: 700, mb: '3px' }}
             >
                 {Math.round(clamped)}%
             </Typography>
@@ -71,13 +81,27 @@ const ThrusterBar: React.FC<{ label: string; power: number }> = ({ label, power 
                     overflow: 'hidden',
                 }}
             >
+                {/* Zero detent — the line both fills grow away from. */}
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: 0,
+                        width: '100%',
+                        height: '1.5px',
+                        backgroundColor: alpha(textPrimary, 0.4),
+                        transform: 'translateY(-50%)',
+                    }}
+                />
                 <animated.div
                     style={{
                         position: 'absolute',
-                        bottom: 0,
                         left: 0,
                         width: '100%',
-                        height: spring.h.to((v) => `${v}%`),
+                        // Anchored to the 50% centreline: ahead grows up from it, astern
+                        // down. Half-magnitude because each direction owns half the track.
+                        bottom: spring.v.to((v) => (v >= 0 ? '50%' : `${50 - Math.abs(v) / 2}%`)),
+                        height: spring.v.to((v) => `${Math.abs(v) / 2}%`),
                         backgroundColor: color,
                         transition: 'background-color 0.3s ease',
                     }}
