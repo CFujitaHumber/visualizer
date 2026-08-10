@@ -73,13 +73,6 @@ export default function MappingScene() {
     const mapInfo = useAppSelector((state: RootState) => state.telemetry.map.info);
     const autoSimActive = !isConnected && simMode === 'automatic';
 
-
-    const [_,setIsToroidal] = React.useState(false);
-
-    React.useEffect(() => {
-        setIsToroidal(isConnected);
-    }, [isConnected]);
-
     // The board is whatever the basestation actually sent, not a hardcoded 20x20.
     // `gridMetrics` guards the empty-grid case so these stay sane before the first payload.
     const gridDims = React.useMemo(() => dimsOfGrid(occupancyGrid), [occupancyGrid]);
@@ -494,7 +487,6 @@ export default function MappingScene() {
                         onToggleFullscreen={toggleFullscreen}
                         onRegenerateMap={handleRegenerateMap}
                         joystickProps={joystickProps}
-                        toroidal={isTorodial}
                     >
                         <SceneHUD.Tabs />
                         <SceneHUD.StatusBadges />

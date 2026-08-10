@@ -32,7 +32,6 @@ const ISO_SIN30 = Math.sin(Math.PI / 6);
  * @property {(y: number) => void} setGlobalY - Function to update the global Y coordinate.
  * @property {number} [headingOverride] - Heading to draw the vessel at, overriding `asv.heading`.
  * @property {boolean} [showVessel] - Whether the vessel is drawn at all.
- * @property {boolean} [toroidal] - Whether the world wraps at its edges. True (default) preserves the endless demo world; set false for a real occupancy grid, which has hard edges — see useWorldInstances .
  * @property {boolean} isDesktopMode - Indicates if the application is in desktop mode.
  * @property {boolean} isFullscreen - Indicates if the scene is currently in fullscreen mode.
  * @property {boolean} isMobile - Indicates if the application is running on a mobile device.
@@ -68,7 +67,9 @@ export interface SceneCanvasProps {
     headingOverride?: number;
     /** Whether the vessel is drawn. False when there is no trustworthy position for it. */
     showVessel?: boolean;
-    toroidal: boolean;
+    // Whether the world wraps at its edges is deliberately not a prop: `SceneRenderer`
+    // derives it from the connection status, because only the synthetic demo world is
+    // endless — a real SLAM map has edges and must not teleport the vessel to the far side.
     isDesktopMode: boolean;
     isFullscreen: boolean;
     isMobile: boolean;
@@ -127,7 +128,6 @@ export const SceneCanvas: React.FC<SceneCanvasProps> = ({
     setGlobalY,
     headingOverride,
     showVessel = true,
-    toroidal = true,
     isDesktopMode,
     isFullscreen,
     isMobile,
@@ -248,7 +248,6 @@ export const SceneCanvas: React.FC<SceneCanvasProps> = ({
                     preserveAspectRatio={isFullscreen ? 'xMidYMid slice' : undefined}
                     interactionProps={{}}
                     showVessel={showVessel}
-                    toroidal={toroidal}
                     mappingData={{
                         globalX,
                         globalY,
