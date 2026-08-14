@@ -50,7 +50,7 @@
         "isometric-physics": "^1.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-        "react-isometric-engine": "^1.0.0",
+        "react-isometric-engine": "^1.1.1",
         "react-redux": "^9.0.0",
       },
     },

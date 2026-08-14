@@ -102,11 +102,17 @@ export default function Compass() {
 	);
 
 	return (
+		// `aspectRatio` only applies when one axis is left indefinite. Pairing it with
+		// `height: 100%` (which the stretched flex row in the consumer resolves) made
+		// both axes definite, so the ratio was silently dropped. Width comes from the
+		// parent, height is derived — same contract as the Speedometer tile. The
+		// container query context lets the contents scale off the tile's own width so
+		// they keep fitting whatever the ratio works out to.
 		<Box
 			sx={{
+				containerType: "inline-size",
 				width: "100%",
-				height: "100%",
-				minHeight: 0,
+				aspectRatio: "140 / 15",
 				backgroundColor: theme.palette.telemetry?.background.primary,
 				border: theme.palette.telemetry?.border.light,
 				borderRadius: 2,
@@ -133,11 +139,12 @@ export default function Compass() {
 					minHeight: 0,
 					display: "flex",
 					flexDirection: "column",
-					gap: { xs: 1, sm: 1.25 },
+					gap: "0.4cqw",
 					px: { xs: 0, sm: 0.5 },
 				}}
 			>
-				{/* SVG Tick Strip */}
+				{/* SVG Tick Strip — takes the height left over after the coordinate row,
+				    and `preserveAspectRatio="none"` lets the viewBox stretch to fill it. */}
 				<Box
 					component="svg"
 					viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
@@ -146,7 +153,8 @@ export default function Compass() {
 					sx={{
 						display: "block",
 						overflow: "hidden",
-						height: { xs: 42, sm: VIEW_HEIGHT },
+						flex: "1 1 0",
+						minHeight: 0,
 					}}
 				>
 					<animated.g transform={x.to((v) => `translate(${v}, 0)`)}>{ticks}</animated.g>
@@ -180,7 +188,7 @@ export default function Compass() {
 							sx={{
 								zIndex: -100,
 								width: "2px",
-								height: "40px",
+								height: "clamp(14px, 3cqw, 40px)",
 								backgroundColor: "rgba(222, 20, 20, 0.55)",
 								transform: "translate(-1px,-100%)",
 							}}
@@ -200,8 +208,7 @@ export default function Compass() {
 							justifyContent: "center",
 							backdropFilter: "blur(2px)",
 							boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
-							minWidth: { xs: 52, sm: 58 },
-							minHeight: { xs: 24, sm: 28 },
+							minWidth: "clamp(34px, 4.5cqw, 58px)",
 						}}
 					>
 						<Typography
@@ -209,7 +216,7 @@ export default function Compass() {
 							sx={{
 								color: theme.palette.primary.main,
 								fontWeight: 800,
-								fontSize: { xs: "30px", sm: "43px" },
+								fontSize: "clamp(14px, 3.2cqw, 43px)",
 								lineHeight: 1,
 							}}
 						>
@@ -221,20 +228,26 @@ export default function Compass() {
 				{/* Coordinates */}
 				<Box
 					sx={{
-						mt: "auto",
-						pb: 1,
+						flexShrink: 0,
 						paddingRight: { xs: "20%", sm: "5%" },
 						paddingLeft: { xs: "20%", sm: "5%" },
 						display: "flex",
 						flexDirection: "row",
 						justifyContent: "space-between",
 						gap: "4px",
+						lineHeight: 1,
 					}}
 				>
-					<Typography variant="caption" sx={{ fontSize: "20px", color: theme.palette.telemetry?.text.primary }}>
+					<Typography
+						variant="caption"
+						sx={{ fontSize: "clamp(9px, 1.6cqw, 20px)", lineHeight: 1, color: theme.palette.telemetry?.text.primary }}
+					>
 						Lat: {latitude.toFixed(4)}°
 					</Typography>
-					<Typography variant="caption" sx={{ fontSize: "20px", color: theme.palette.telemetry?.text.primary }}>
+					<Typography
+						variant="caption"
+						sx={{ fontSize: "clamp(9px, 1.6cqw, 20px)", lineHeight: 1, color: theme.palette.telemetry?.text.primary }}
+					>
 						Lon: {longitude.toFixed(4)}°
 					</Typography>
 				</Box>

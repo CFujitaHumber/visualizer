@@ -30,8 +30,13 @@ describe('telemetryFactory', () => {
     expect(typeof next.asv.heading).toBe('number');
     expect(next.asv.heading).toBeGreaterThanOrEqual(0);
     expect(next.asv.heading).toBeLessThan(360);
-    expect(next.motors.left).toBeGreaterThanOrEqual(0);
+    // Thruster power is SIGNED — -100 full astern, 0 stopped, +100 full ahead (see
+    // Status.motors). Asserting a 0 lower bound made this test fail roughly half the
+    // time, since the factory's random walk is free to cross zero into reverse.
+    expect(next.motors.left).toBeGreaterThanOrEqual(-100);
     expect(next.motors.left).toBeLessThanOrEqual(100);
+    expect(next.motors.right).toBeGreaterThanOrEqual(-100);
+    expect(next.motors.right).toBeLessThanOrEqual(100);
   });
 
   it('generateMockVideoUrl returns an http(s) URL', () => {

@@ -31,6 +31,7 @@ import ChangeZoomTargetIcon from '@mui/icons-material/Search';
 import type { RootState } from "../../../store";
 import { useSelector } from "react-redux";
 import { CellTypes, type Cell, type TaskStatus } from "../../../types";
+import { selectIndicatorStatus } from "../../../store/selectors/telemetrySelectors";
 import { useTheme } from "@mui/material/styles"
 
 /**
@@ -51,7 +52,10 @@ const MapSVG: React.FC<{ zoomLevel: number; width: string; height: string; cente
     const navigationGrid = mapData.navigationGrid;
 
     const planningData = useSelector((state: RootState) => state.telemetry.planning);
-    const status = planningData.status;
+    // Ring colour follows the vessel's mode, which comes from the mast lamp rather
+    // than planning.status — see selectIndicatorStatus. The course/plan below still
+    // come from `planning`, which is genuinely the planner's own data.
+    const status = useSelector(selectIndicatorStatus);
     const course = planningData.course;
     const plan = planningData.plan;
 

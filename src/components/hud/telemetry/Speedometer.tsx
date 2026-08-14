@@ -93,7 +93,7 @@ export default function Speedometer() {
 						marginLeft: "4px",
 					}}
 				>
-					m/s
+					Knots
 				</Typography>
 			</Box>
 		</Box>

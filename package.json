@@ -1,6 +1,6 @@
 {
   "name": "visualizer-components",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Humber ASV telemetry visualizer — React components, Redux slices, MUI themes, and basestation connection utilities built on @react-spring/web, @use-gesture, MUI and Redux Toolkit.",
   "license": "MIT",
   "author": "Carson Fujita",

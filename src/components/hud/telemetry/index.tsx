@@ -14,6 +14,8 @@
  * - `SignalLog`: Displays a scrolling log of signal/comms events.
  * - `SignalStrength`: Displays the signal strength of the ASV's communication link.
  * - `Speedometer`: Displays the current speed of the ASV.
+ * - `StatusIndicator`: Displays the vessel's operating mode — autonomous, remote
+ *   control, standby, or out of control — derived from its physical mast light.
  * - `Task`: Displays information about the current task being performed by the ASV.
  * - `TaskData`: Displays detailed data related to the current task.
  *
@@ -29,6 +31,7 @@ import PowerRudderPanel from "./PowerRudderPanel";
 import SignalLog from "./SignalLog";
 import SignalStrength from "./SignalStrength";
 import Speedometer from "./Speedometer";
+import StatusIndicator from "./StatusIndicator";
 import Task from "./Task";
 import TaskData from "./TaskData";
 
@@ -41,9 +44,12 @@ export {
 	SignalLog,
 	SignalStrength,
 	Speedometer,
+	StatusIndicator,
 	Task,
 	TaskData,
 };
+
+export type { StatusIndicatorProps } from "./StatusIndicator";
 
 export { RadiusVisualizer, type RadiusVisualizerProps, type RadarObstacle } from "./RadiusVisualizer";
 export { RadiusVisualizerPanel, type RadiusVisualizerPanelProps } from "./RadiusVisualizerPanel";

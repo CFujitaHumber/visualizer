@@ -177,6 +177,28 @@ type Status = {
         course: Path;
         plan: Path;
     };
+    /**
+     * The vessel's physical status light, as the bridge received it on `led`
+     * (std_msgs/ColorRGBA). Channels are 0..1 floats, NOT 0..255.
+     *
+     * @remarks
+     * This is the authoritative statement of what mode the boat is in, because it
+     * is the same signal the safety judges read off the mast: green = autonomous,
+     * amber (red+green) = manual/remote, red = e-stop. `planning.status` is derived
+     * from the `task` topic and can disagree with the light if the autonomy
+     * pipeline and the e-stop line disagree — when they do, the light wins.
+     *
+     * `alpha` doubles as a has-data flag: it is 0 in {@link InitialStatus} and stays
+     * 0 until a real ColorRGBA arrives, so `alpha === 0` means "no light reported",
+     * not "a transparent light". Consumers must fall back to `planning.status`
+     * rather than render black. See {@link ledStatusColor}.
+     */
+    led: {
+        red: number;
+        green: number;
+        blue: number;
+        alpha: number;
+    };
     task: {
         log: string[];
         location: TaskLocation;
@@ -218,14 +240,14 @@ const InitialStatus: Status = {
         courseTrail: [],
     },
     planning: {
-        status: TaskValues.standby,
+        status: TaskValues.lostConnection,
         course: [],
         plan: []
     },
     task: {
         log: [],
         location: { latitude: 0, longitude: 0 },
-        data: { id: 0, name: "", status: "standby", latitude: 0, longitude: 0 }
+        data: { id: 0, name: "", status: "lost connection", latitude: 0, longitude: 0 }
     },
     rudder: {
         angle: 0
@@ -243,6 +265,12 @@ const InitialStatus: Status = {
         heading: 0,
         longitude: 0,
         latitude: 0
+    },
+    led: {
+        red: 1,
+        green: 1,
+        blue: 1,
+        alpha: 1,
     },
     signal: {
         strength: 100

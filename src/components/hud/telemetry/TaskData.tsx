@@ -25,8 +25,9 @@ SOFTWARE.
 
 import { useSelector } from "react-redux";
 import type { RootState } from "../../../store/store";
-import { Box, Typography, Chip } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
+import StatusIndicator from "./StatusIndicator";
 
 const fmt = (n: number) => n.toFixed(2);
 
@@ -37,7 +38,7 @@ function DataRow({ label, value }: { label: string; value: string }) {
 			<Typography sx={{ fontSize: "9px", color: theme.palette.telemetry?.text.secondary, minWidth: 60 }}>
 				{label}
 			</Typography>
-			<Typography sx={{ fontSize: "10px", color: theme.palette.telemetry?.text.primary, fontFamily: "monospace" }}>
+			<Typography sx={{ fontSize: "13px", color: theme.palette.telemetry?.text.primary, fontFamily: "monospace" }}>
 				{value}
 			</Typography>
 		</Box>
@@ -63,63 +64,41 @@ export default function TaskData() {
 				? theme.palette.warning.main
 				: theme.palette.success.main;
 
-	const getStatusColor = (status: string | undefined) => {
-		switch (status) {
-			case "autonomous": return "success";
-			case "remote":     return "info";
-			case "standby":    return "warning";
-			case "out of control": return "error";
-			default:           return "default";
-		}
-	};
-
 	const sectionLabel = (text: string) => (
-		<Typography sx={{ fontSize: "9px", fontWeight: "bold", color: theme.palette.telemetry?.text.secondary, textTransform: "uppercase", mt: 0.5 }}>
+		<Typography sx={{ fontSize: "11px", fontWeight: "bold", color: theme.palette.telemetry?.text.secondary, textTransform: "uppercase", mt: 0.5 }}>
 			{text}
 		</Typography>
 	);
 
 	return (
+		/* Body only. The host owns the panel frame, the title, and whatever show/hide
+		   affordance it wants — the website's Telemetry page wraps this in a collapsible
+		   card. Still a flex column with `minHeight: 0` so that when a host does constrain
+		   the height, the rows scroll inside it rather than pushing the panel past its
+		   container. */
 		<Box
 			sx={{
 				width: "100%",
 				height: "100%",
-				backgroundColor: theme.palette.telemetry?.background.primary,
-				border: `2px solid ${theme.palette.telemetry?.border.light}`,
-				borderRadius: "8px",
-				padding: "12px",
-				display: "flex",
-				flexDirection: "column",
+				minHeight: 0,
 				gap: "6px",
-				overflow: "hidden",
+				overflowY: "scroll",
 			}}
 		>
-			<Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-			<Typography
-				variant="caption"
-				sx={{ fontWeight: "bold", color: theme.palette.telemetry?.text.primary, fontSize: "10px", textTransform: "uppercase" }}
-			>
-				Task Data
-			</Typography>
-
-			{/* Task status */}
-			{taskData ? (
-				<Box sx={{ display: "flex", alignItems: "center", gap: "6px" }}>
-					<Typography variant="caption" sx={{ fontSize: "10px", color: theme.palette.telemetry?.text.primary, fontWeight: "bold" }}>
-						Status:
-					</Typography>
-					<Chip
-						label={taskData.status || "Unknown"}
-						size="small"
-						color={getStatusColor(taskData.status)}
-						variant="outlined"
-						sx={{ height: "20px", fontSize: "10px" }}
-					/>
-				</Box>
-			) : (
-				<Typography variant="caption" sx={{ color: theme.palette.telemetry?.text.secondary, fontSize: "10px" }}>
-					No task data
+			{/* Vessel status. Shared indicator rather than a local chip: the mode comes
+			    from the mast lamp, not from `taskData.status`, and every site that
+			    shows it must agree. See StatusIndicator. */}
+			<Box sx={{ display: "flex", alignItems: "center", gap: "6px" }}>
+				<Typography variant="caption" sx={{ fontSize: "13px", color: theme.palette.telemetry?.text.primary, fontWeight: "bold" }}>
+					Status:
 				</Typography>
+				<StatusIndicator filled fontSize="13px" />
+			</Box>
+
+			{/* The task the ASV is working, which is a different question from what mode
+			    it is in — this is the one thing here that still comes from `task.data`. */}
+			{taskData && (
+				<DataRow label="task" value={taskData.name || `#${taskData.id}`} />
 			)}
 
 			{/* Data feed — telemetry frames arriving from the basestation. */}
@@ -128,7 +107,7 @@ export default function TaskData() {
 				<Typography sx={{ fontSize: "9px", color: theme.palette.telemetry?.text.secondary, minWidth: 60 }}>
 					rate
 				</Typography>
-				<Typography sx={{ fontSize: "10px", color: feedColor, fontFamily: "monospace", fontWeight: "bold" }}>
+				<Typography sx={{ fontSize: "13px", color: feedColor, fontFamily: "monospace", fontWeight: "bold" }}>
 					{isConnected && frameRate !== null ? `${frameRate.toFixed(1)} f/s` : "—"}
 				</Typography>
 			</Box>
@@ -136,12 +115,12 @@ export default function TaskData() {
 
 			{/* ZED Odometry */}
 			{sectionLabel("ZED Odometry")}
-			<DataRow label="pos x"   value={fmt(zed.odom.position.x)} />
-			<DataRow label="pos y"   value={fmt(zed.odom.position.y)} />
-			<DataRow label="pos z"   value={fmt(zed.odom.position.z)} />
-			<DataRow label="roll"    value={`${fmt(zed.odom.orientation.roll)}°`} />
-			<DataRow label="pitch"   value={`${fmt(zed.odom.orientation.pitch)}°`} />
-			<DataRow label="yaw"     value={`${fmt(zed.odom.orientation.yaw)}°`} />
+			<DataRow label="pos x" value={fmt(zed.odom.position.x)} />
+			<DataRow label="pos y" value={fmt(zed.odom.position.y)} />
+			<DataRow label="pos z" value={fmt(zed.odom.position.z)} />
+			<DataRow label="roll" value={`${fmt(zed.odom.orientation.roll)}°`} />
+			<DataRow label="pitch" value={`${fmt(zed.odom.orientation.pitch)}°`} />
+			<DataRow label="yaw" value={`${fmt(zed.odom.orientation.yaw)}°`} />
 
 			{/* ZED Camera */}
 			{sectionLabel("ZED Camera")}
@@ -152,18 +131,18 @@ export default function TaskData() {
 			{zed.camera.active && (
 				<>
 					<DataRow label="resolution" value={`${zed.camera.width}×${zed.camera.height}`} />
-					<DataRow label="encoding"   value={zed.camera.encoding || "—"} />
+					<DataRow label="encoding" value={zed.camera.encoding || "—"} />
 				</>
 			)}
 
 			{/* Detected Objects */}
 			{sectionLabel(`Objects (${zed.objects.length})`)}
 			{zed.objects.length === 0 ? (
-				<Typography sx={{ fontSize: "10px", color: theme.palette.telemetry?.text.secondary }}>None</Typography>
+				<Typography sx={{ fontSize: "12px", color: theme.palette.telemetry?.text.secondary }}>None</Typography>
 			) : (
 				zed.objects.map((obj, i) => (
 					<Box key={i} sx={{ display: "flex", gap: "6px", alignItems: "baseline" }}>
-						<Typography sx={{ fontSize: "10px", color: theme.palette.telemetry?.text.primary, fontWeight: "bold", minWidth: 60 }}>
+						<Typography sx={{ fontSize: "13px", color: theme.palette.telemetry?.text.primary, fontWeight: "bold", minWidth: 60 }}>
 							{obj.label}
 						</Typography>
 						<Typography sx={{ fontSize: "9px", color: theme.palette.telemetry?.text.secondary, fontFamily: "monospace" }}>
@@ -176,7 +155,7 @@ export default function TaskData() {
 			{/* Services / Topics */}
 			{sectionLabel(`Services / Topics (${topics.length})`)}
 			{topics.length === 0 ? (
-				<Typography sx={{ fontSize: "10px", color: theme.palette.telemetry?.text.secondary }}>None</Typography>
+				<Typography sx={{ fontSize: "13px", color: theme.palette.telemetry?.text.secondary }}>None</Typography>
 			) : (
 				topics.map((topic) => (
 					<Typography
@@ -187,7 +166,6 @@ export default function TaskData() {
 					</Typography>
 				))
 			)}
-		</Box>
 		</Box>
 	);
 }

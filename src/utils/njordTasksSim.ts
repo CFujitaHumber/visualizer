@@ -1,6 +1,7 @@
 import type { Status } from '../types/statusTypes';
 import type { DetectedObject } from "../types/detectedObjectsTypes";
 import { TaskValues } from "../types";
+import { ledForStatus } from "./led";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const wrapHeading = (heading: number) => {
@@ -202,6 +203,9 @@ export function generateRandomState(): Status {
         battery: { motors: 100, primary: 100 },
         rudder: { angle: 0 },
         motors: { left: 0, right: 0 },
+        // Mast light, mirroring the mode the sim is in so the LED-themed indicators
+        // are exercised without a basestation. See utils/led.ts.
+        led: ledForStatus(manualMode ? TaskValues.standby : TaskValues.autonomous),
         asv: {
             speed: 0,
             heading: 0,
@@ -431,6 +435,10 @@ export function generateMockStateUpdate(previous: Status): Status {
             ...previous.planning,
             status: manualMode ? TaskValues.standby : TaskValues.autonomous
         },
+        // Kept in step with the mode above — the real lamp changes the instant the
+        // autonomy line does, so a sim that only set it once would let the indicator
+        // and the status chip drift apart.
+        led: ledForStatus(manualMode ? TaskValues.standby : TaskValues.autonomous),
         map: {
             ...previous.map,
             courseTrail: nextPathHistory,

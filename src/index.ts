@@ -68,6 +68,17 @@ export {
 // ─── Utilities & factory programs ────────────────────────────────────────────
 export { isBasestationOnline } from './utils/basestation';
 export { batteryIconFor } from './utils/batteryUtil';
+// Mast-light helpers. Exported because the operating mode is derived from the lamp
+// rather than reported directly, so an embedder building its own indicator needs the
+// same classification the built-in StatusIndicator uses.
+export {
+    hasLedReading,
+    ledCssColor,
+    ledStatus,
+    ledForStatus,
+    LED_FOR_STATUS,
+    type LedColor,
+} from './utils/led';
 export { telemetryFactory } from './utils/telemetry';
 export {
     default as generateRandomState,

@@ -36,6 +36,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '../../../store/store';
 import { Box, Typography } from '@mui/material';
 import { batteryIconFor } from '../../../utils/batteryUtil';
+import { selectIndicatorStatus } from '../../../store/selectors/telemetrySelectors';
 
 const BatteryReadout: React.FC<{ label: string; level: number }> = ({ label, level }) => {
     const Icon = batteryIconFor(level);
@@ -54,7 +55,9 @@ export default function SystemStatusHUD() {
     const signalStrength = useSelector((state: RootState) => state.telemetry.signal.strength);
     const motorsBattery = useSelector((state: RootState) => state.telemetry.battery.motors);
     const primaryBattery = useSelector((state: RootState) => state.telemetry.battery.primary);
-    const autonomyMode = useSelector((state: RootState) => state.telemetry.planning.status === 'autonomous');
+    // From the mast lamp rather than planning.status, which is not fed on a live
+    // boat — see selectIndicatorStatus.
+    const autonomyMode = useSelector(selectIndicatorStatus) === 'autonomous';
     const connectionStatus = signalStrength > 0 ? 'connected' : 'disconnected';
 
     return (

@@ -9,6 +9,11 @@ Data flow: `visualizer ← Redux ← WebSocket ← basestation ← ROS 2 (DDS) �
 The basestation bridges ROS message shapes to the library's `Status` wire
 format; image streams bypass Redux (only the stream URL is stored).
 
+
+## Status
+
+review [statusTypes.ts](src/types/statusTypes.ts) for the current list of supported telemetry types. The library is under active development; breaking changes may occur in minor versions.
+
 ## Install
 
 ```sh

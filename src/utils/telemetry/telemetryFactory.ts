@@ -59,6 +59,7 @@ SOFTWARE.
 */
 import type { Status, Grid, Path, TaskData, TaskLocation } from "../../types";
 import { CellTypes, InitialCell, TaskValues, GLOBAL_CELL_SIZE, GLOBAL_GRID_SIZE, LOCAL_CELL_SIZE } from "../../types";
+import { ledForStatus } from "../led";
  
 // clamp a value between a minimum and maximum
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -374,7 +375,11 @@ export function generateRandomState(): { status: Status; fineGrid: Grid } {
     const occupancyGrid = deriveCoarseGrid(fineGrid);
     const { navigationGrid, path } = createNavigationGrid(occupancyGrid);
     const { course, plan } = createPlanning(navigationGrid, path);
+    // Hoisted so the mast light below can be derived from the same draw — picking
+    // the status twice would let the lamp and the chip disagree.
+    const planningStatus = TaskValues.simulator;
 
+    console.log(planningStatus);
     const status: Status = {
         map: {
             occupancyGrid,
@@ -382,7 +387,7 @@ export function generateRandomState(): { status: Status; fineGrid: Grid } {
             courseTrail: [],
         },
         planning: {
-            status: randomChoice(Object.values(TaskValues)),
+            status: planningStatus,
             course: course,
             plan: plan,
         },
@@ -418,6 +423,9 @@ export function generateRandomState(): { status: Status; fineGrid: Grid } {
             originLongitude: 0,
             hasOrigin: false,
         },
+        // Mast light, derived from the planning status chosen above so the LED-themed
+        // indicators agree with the status chip. See utils/led.ts.
+        led: ledForStatus(planningStatus),
         signal: {
             strength: randomBetween(0, 100),
         },

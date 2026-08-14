@@ -62,6 +62,7 @@ import type { TaskData, TaskLocation } from "../types/taskTypes";
 import type { DetectedObject } from "../types/detectedObjectsTypes";
 import type { Path, Grid } from "react-isometric-engine";
 import { CellTypes, InitialCell, TaskValues } from "../types";
+import { ledForStatus } from "./led";
  
 // clamp a value between a minimum and maximum
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -198,6 +199,9 @@ export function generateRandomState(): Status {
     const { course, plan } = createPlanning(navigationGrid, path);
 
     const taskData = createTaskData();
+    // Hoisted so the mast light below can be derived from the same draw — picking
+    // the status twice would let the lamp and the chip disagree.
+    const planningStatus = randomChoice(Object.values(TaskValues));
 
     return {
         map: {
@@ -206,7 +210,7 @@ export function generateRandomState(): Status {
             courseTrail: [],
         },
         planning: {
-            status: randomChoice(Object.values(TaskValues)),
+            status: planningStatus,
             course: course,
             plan: plan,
         },
@@ -232,6 +236,10 @@ export function generateRandomState(): Status {
             longitude: randomBetween(-180, 180),
             latitude: randomBetween(-90, 90),
         },
+        // Mast light, derived from the planning status above. An all-zero lamp would
+        // classify as "lost connection" (see utils/led.ts), which is not what a
+        // freshly-generated prototype state is meant to be showing.
+        led: ledForStatus(planningStatus),
         signal: {
             strength: randomBetween(0, 100),
         },

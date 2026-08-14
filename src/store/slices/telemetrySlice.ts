@@ -151,6 +151,13 @@ const telemetrySlice = createSlice({
         setASVHeading: (state, action: PayloadAction<number>) => { state.asv.heading = action.payload; },
         setASVLongitude: (state, action: PayloadAction<number>) => { state.asv.longitude = action.payload; },
         setASVLatitude: (state, action: PayloadAction<number>) => { state.asv.latitude = action.payload; },
+        // Mast light channels, 0..1 (NOT 0..255) — see Status.led. Each setter also
+        // raises `alpha`, because alpha is the has-a-reading flag the consumers test
+        // against; writing a channel without it would leave the light classified as
+        // "never reported" and the indicators stuck on the planning-status fallback.
+        setGreen: (state, action: PayloadAction<number>) => { state.led.green = action.payload; state.led.alpha = 1; },
+        setRed: (state, action: PayloadAction<number>) => { state.led.red = action.payload; state.led.alpha = 1; },
+        setBlue: (state, action: PayloadAction<number>) => { state.led.blue = action.payload; state.led.alpha = 1; },
         // The basestation computes this itself: 100 while its `phone` GPS/heading topic is
         // fresh, 0 once it's gone stale (>5s) — a connection-freshness proxy, not real RSSI.
         setSignalStrength: (state, action: PayloadAction<number>) => { state.signal.strength = action.payload; },
@@ -215,6 +222,9 @@ export const {
     setASVHeading,
     setASVLongitude,
     setASVLatitude,
+    setRed,
+    setGreen,
+    setBlue,
     setSignalStrength,
     appendCourseTrailPoint,
     clearCourseTrail,

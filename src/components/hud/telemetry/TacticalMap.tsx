@@ -34,7 +34,7 @@ import GpsFixedIcon from '@mui/icons-material/GpsFixed';
 import GpsNotFixedIcon from '@mui/icons-material/GpsNotFixed';
 import { useAppSelector } from '../../../store';
 import type { RootState } from '../../../store';
-import { selectVesselLocalMeters, selectZedObjectsWorld } from '../../../store/selectors/telemetrySelectors';
+import { selectIndicatorStatus, selectLedColor, selectVesselLocalMeters, selectZedObjectsWorld } from '../../../store/selectors/telemetrySelectors';
 import type { CourseTrailPoint, DetectedObject } from "../../../types";
 import { catamaranSvgStr } from '../../../assets/svgSources';
 import {
@@ -105,9 +105,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
     // (compass heading) is used instead, consistently with BigMap and the course trail.
     const headingASV = useAppSelector((state:RootState) => state.telemetry.asv.heading);
     const pathASV = useAppSelector((state: RootState) => state.telemetry.map.courseTrail);
-    // Drives the header status dot. `planning.status` is what the bridge derives from
-    // Task messages (see _ACTION_TO_STATUS) and is the same value the status chip shows.
-    const vesselStatus = useAppSelector((state: RootState) => state.telemetry.planning.status);
+    // Drives the header status dot. Prefers the vessel's physical mast light over the
+    // planner's own account of the mode — see selectIndicatorStatus for why the lamp
+    // wins when the two disagree.
+    const vesselStatus = useAppSelector(selectIndicatorStatus);
+    const ledColor = useAppSelector(selectLedColor);
 
     //  Colors
     const bgDefault = theme.palette.background.default;
@@ -120,11 +122,12 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ onClose}) => {
     const badgeBg = telemetry?.background.tertiary ?? alpha(textPrimary, 0.05);
     const legendBg = telemetry?.background.primary ?? alpha(theme.palette.background.paper, 0.85);
     const mappedAreaColor = theme.palette.info.main;
-    // Status dot color, keyed by the vessel's current mode (autonomous green, remote
-    // blue, standby amber, out of control red, lost connection grey). Falls back to the
-    // generic accent if the telemetry palette isn't present, matching how every other
-    // color in this component degrades.
-    const statusColor = theme.palette.status?.primary?.[vesselStatus] ?? accent;
+    // Status dot color. The mast light's own colour when it is reporting, so the dot and
+    // the lamp match exactly; otherwise keyed by the vessel's mode (autonomous green,
+    // remote blue, standby amber, out of control red, lost connection grey). Falls back
+    // to the generic accent if the telemetry palette isn't present, matching how every
+    // other color in this component degrades.
+    const statusColor = ledColor ?? theme.palette.status?.primary?.[vesselStatus] ?? accent;
     const obstacleColor = telemetry?.status.error ?? theme.palette.error.main;
 
     // Mirrors SceneHUD's `useHudBtnSx` so the two toolbars read as one control

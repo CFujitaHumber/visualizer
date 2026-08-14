@@ -127,6 +127,7 @@ export const ShipRudderVisualizer: React.FC<ShipRudderVisualizerProps> = ({
     stbdPower,
     rudderAngle,
     maxRudderDeg = 30,
+    title = 'PROPULSION',
 }) => {
     const theme = useTheme();
     const telemetry = theme.palette.telemetry;
@@ -172,6 +173,23 @@ export const ShipRudderVisualizer: React.FC<ShipRudderVisualizerProps> = ({
                     color: textPrimary,
                 }}
             >
+                {/* The prop was declared and documented but never destructured or
+                    rendered, so every consumer's title silently did nothing. Matches
+                    how the sibling RadiusVisualizer presents its own. */}
+                <Typography
+                    variant="caption"
+                    sx={{
+                        fontWeight: 'bold',
+                        fontSize: '11px',
+                        mb: 1,
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px',
+                        color: textSecondary,
+                    }}
+                >
+                    {title}
+                </Typography>
+
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', height: 92, px: '5px' }}>
                 <ThrusterBar label="PORT" power={portPower} />
 

@@ -28,9 +28,11 @@ import RadiusVisualizer, { type RadarObstacle } from './RadiusVisualizer';
 
 /** Properties for the {@link RadiusVisualizerPanel} component. */
 export interface RadiusVisualizerPanelProps {
-    /** Radar range in meters. Defaults to 40. */
+    /** Radar resolution in meters per pixel. Defaults to the radar's 33 cm/px. */
+    metersPerPixel?: number;
+    /** Explicit radar range in meters. Unset by default — the resolution sets the range. */
     rangeM?: number;
-    /** Diameter of the radar circle in pixels. Defaults to 120. */
+    /** Diameter of the radar circle in pixels. Defaults to 100. */
     size?: number;
     /** Optional click handler passed through to the radar panel. */
     onClick?: () => void;
@@ -41,7 +43,7 @@ export interface RadiusVisualizerPanelProps {
  * @description Feeds live telemetry (heading, GPS, ZED detections) into the
  * presentational {@link RadiusVisualizer}.
  */
-export const RadiusVisualizerPanel: React.FC<RadiusVisualizerPanelProps> = ({ rangeM, size, onClick }) => {
+export const RadiusVisualizerPanel: React.FC<RadiusVisualizerPanelProps> = ({ metersPerPixel, rangeM, size, onClick }) => {
     const heading = useSelector((state: RootState) => state.telemetry.asv.heading);
     // const latitude = useSelector((state: RootState) => state.telemetry.asv.latitude);
     // const longitude = useSelector((state: RootState) => state.telemetry.asv.longitude);
@@ -85,6 +87,7 @@ export const RadiusVisualizerPanel: React.FC<RadiusVisualizerPanelProps> = ({ ra
                 // latitude={latitude}
                 // longitude={longitude}
                 obstacles={obstacles}
+                metersPerPixel={metersPerPixel}
                 rangeM={rangeM}
                 size={size}
                 onClick={onClick}

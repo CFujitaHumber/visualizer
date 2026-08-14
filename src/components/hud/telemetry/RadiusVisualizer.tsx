@@ -8,6 +8,9 @@
  *   {@link RadiusVisualizerPanel} feeds it ZED detections.
  * - The display is heading-up: the environment is rotated by the vessel heading
  *   so the boat marker always points straight up.
+ * - Scale is resolution-first: one pixel is 33 cm by default ({@link
+ *   RadiusVisualizerProps.metersPerPixel}), so the visible range follows the
+ *   panel size. Pass `rangeM` to pin the range and let the resolution stretch.
  * - Obstacles glide to their new positions with springs, and a looping sonar
  *   ping sweeps outward — both driven by @react-spring/web.
  * - All colors come from the active MUI theme (telemetry/status palette groups),
@@ -49,9 +52,19 @@ export interface RadiusVisualizerProps {
     longitude?: number;
     /** Obstacles relative to the vessel, in meters. */
     obstacles: RadarObstacle[];
-    /** Radar range in meters (obstacles beyond it are hidden). Defaults to 40. */
+    /**
+     * Radar resolution — meters covered by one pixel. Defaults to 0.33 (33 cm/px),
+     * which puts the circle edge at `size / 2 * metersPerPixel`. Ignored when
+     * {@link RadiusVisualizerProps.rangeM} is given.
+     */
+    metersPerPixel?: number;
+    /**
+     * Explicit radar range in meters, center to circle edge (obstacles beyond it
+     * are hidden). Overrides the resolution: one pixel becomes `rangeM / (size / 2)`
+     * meters. Leave unset for the fixed 33 cm/px scale.
+     */
     rangeM?: number;
-    /** Diameter of the radar circle in pixels. Defaults to 120. */
+    /** Diameter of the radar circle in pixels. Defaults to 100. */
     size?: number;
     /** Panel title. Defaults to "MINIMAP". */
     title?: string;
@@ -61,6 +74,8 @@ export interface RadiusVisualizerProps {
 
 const OBSTACLE_SPRING = { tension: 170, friction: 26 };
 const PING_DURATION_MS = 2000;
+/** Default radar resolution: one pixel of the circle spans 33 cm of water. */
+const DEFAULT_M_PER_PX = 0.33;
 
 /**
  * Rotates a boat-relative (east, north) offset into heading-up display space.
@@ -120,7 +135,8 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
     latitude,
     longitude,
     obstacles,
-    rangeM = 40,
+    metersPerPixel = DEFAULT_M_PER_PX,
+    rangeM,
     size = 100,
     title = 'MINIMAP',
     onClick,
@@ -136,8 +152,14 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
     const textPrimary = telemetry?.text.primary ?? theme.palette.text.primary;
     const textSecondary = telemetry?.text.secondary ?? theme.palette.text.secondary;
 
+    // Center value of size (aka, radius)
     const center = size / 2;
-    const scalePx = center / rangeM; // px per meter
+    // Resolution drives the scale: one pixel spans `mPerPx` meters, so the circle
+    // edge lands at `center * mPerPx`. An explicit rangeM inverts that — the range
+    // is pinned and the resolution stretches to fit it.
+    const mPerPx = rangeM !== undefined ? rangeM / center : metersPerPixel;
+    const scalePx = 1 / mPerPx; // px per meter (3.03 px/m at the 33 cm default)
+    const displayRangeM = center * mPerPx; // meters from center to circle edge
 
     // Instance-unique ids so multiple radars on one page don't cross-reference defs.
     const uid = React.useId();
@@ -148,7 +170,7 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
     const visible = React.useMemo(
         () =>
             obstacles
-                .filter((obs) => Math.hypot(obs.x, obs.y) < rangeM)
+                .filter((obs) => Math.hypot(obs.x, obs.y) < displayRangeM)
                 .map((obs) => {
                     const rotated = rotateHeadingUp(obs.x, obs.y, heading);
                     return {
@@ -158,7 +180,7 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
                         cy: center - rotated.y * scalePx,
                     };
                 }),
-        [obstacles, heading, rangeM, center, scalePx],
+        [obstacles, heading, displayRangeM, center, scalePx],
     );
 
     // Cardinal markers rotate opposite the heading so they stay geographically true.
@@ -253,7 +275,7 @@ export const RadiusVisualizer: React.FC<RadiusVisualizerProps> = ({
 
                     {/* Obstacles (heading-up environment rotation) */}
                     {visible.map((obs) => (
-                        <ObstacleDot key={obs.id} cx={obs.cx*30} cy={obs.cy*30} color={obstacleColor} />
+                        <ObstacleDot key={obs.id} cx={obs.cx} cy={obs.cy} color={obstacleColor} />
                     ))}
 
                     {/* Cardinal markers, geographically true */}

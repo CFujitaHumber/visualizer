@@ -63,6 +63,39 @@ describe('RadiusVisualizer', () => {
     expect(cy).toBeCloseTo(45, 3);
   });
 
+  it('plots at 33 cm per pixel by default', () => {
+    // size 100 → 50 px radius; 3.3 m north is 10 px up at the default resolution.
+    const { container } = renderRadar({ obstacles: [{ id: 'ahead', x: 0, y: 3.3 }] });
+
+    const dot = obstacleDots(container)[0]!;
+    expect(Number(dot.getAttribute('cx'))).toBeCloseTo(50, 3);
+    expect(Number(dot.getAttribute('cy'))).toBeCloseTo(40, 3);
+  });
+
+  it('derives its range from the resolution when rangeM is unset', () => {
+    // 50 px radius at 0.33 m/px reaches 16.5 m.
+    const { container } = renderRadar({
+      obstacles: [
+        { id: 'inside', x: 0, y: 16 },
+        { id: 'outside', x: 0, y: 17 },
+      ],
+    });
+
+    expect(obstacleDots(container)).toHaveLength(1);
+  });
+
+  it('lets an explicit rangeM stretch the resolution to fit', () => {
+    // rangeM 25 over a 50 px radius → 0.5 m/px, so 10 m east is 20 px right of center.
+    const { container } = renderRadar({
+      rangeM: 25,
+      obstacles: [{ id: 'starboard', x: 10, y: 0 }],
+    });
+
+    const dot = obstacleDots(container)[0]!;
+    expect(Number(dot.getAttribute('cx'))).toBeCloseTo(70, 3);
+    expect(Number(dot.getAttribute('cy'))).toBeCloseTo(50, 3);
+  });
+
   it('renders the four cardinal markers', () => {
     renderRadar();
     for (const label of ['N', 'E', 'S', 'W']) {

@@ -76,7 +76,10 @@ const PowerBar = ({ value }: { value: number }) => {
 						left: 0,
 						right: 0,
 						bottom: 0,
-						height: `${Math.max(0, Math.min(100, value))}%`,
+						// Magnitude, because thruster power is signed (see Status.motors).
+						// Clamping the raw value left the bar empty for the whole astern
+						// half of the range while the readout beside it said "-80%".
+						height: `${Math.min(100, Math.abs(value))}%`,
 						backgroundColor: getPowerColor(theme, value),
 						transition: "height 0.25s ease-out",
 					}}

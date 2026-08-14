@@ -15,8 +15,9 @@
  */
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '../store';
-import type { DetectedObject } from '../../types';
+import type { DetectedObject, TaskStatus } from '../../types';
 import { measureLocalMeters, projectBoatRelative } from '../../utils/geo';
+import { ledCssColor, ledStatus } from '../../utils/led';
 
 /** Local tangent-plane origin latched from the first usable GPS fix. */
 export const selectFrame = (state: RootState) => state.telemetry.frame;
@@ -61,6 +62,46 @@ export const selectZedObjectsWorld = createSelector(
             ...obj,
             position: projectBoatRelative(obj.position, heading, anchor),
         })),
+);
+
+const selectLed = (state: RootState) => state.telemetry.led;
+const selectPlanningStatus = (state: RootState) => state.telemetry.planning.status;
+const selectMotors = (state: RootState) => state.telemetry.motors;
+
+/**
+ * The vessel's operating mode: autonomous, remote control, standby, or out of
+ * control. This is what the Status Indicator displays.
+ *
+ * @remarks
+ * Derived from the mast lamp, because it is the only live signal that carries the
+ * mode. The `task` topic's action float is NOT one — it is a motor-command
+ * vocabulary (-1 reverse / 0 stop / 1 drive / 2 turn), it has no value meaning
+ * "e-stop pulled", and nothing publishes the topic any more since Loon-E renamed
+ * it to `motor_command`. The basestation no longer maps it to a status at all.
+ *
+ * `planning.status` remains the fallback for the case the lamp cannot cover: mock
+ * and simulation runs, where there is no basestation and the sims set both. On a
+ * live boat the bridge derives `planning.status` from the same lamp, so the two
+ * agree by construction.
+ *
+ * Thruster power only ever splits amber — see {@link ledStatus}.
+ */
+export const selectIndicatorStatus = createSelector(
+    [selectLed, selectMotors, selectPlanningStatus],
+    (led, motors, planningStatus): TaskStatus => ledStatus(led, motors) ?? planningStatus,
+);
+
+/**
+ * The measured colour of the status light, or null when it has not reported.
+ *
+ * @remarks
+ * Null is the signal to fall back to `theme.palette.status.primary[...]` keyed by
+ * {@link selectIndicatorStatus} — see {@link ledCssColor} for why this returns the
+ * real colour rather than a palette entry.
+ */
+export const selectLedColor = createSelector(
+    [selectLed],
+    (led): string | null => ledCssColor(led),
 );
 
 const selectMapInfo = (state: RootState) => state.telemetry.map.info;
