@@ -1,6 +1,6 @@
 {
   "name": "visualizer-components",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Humber ASV telemetry visualizer — React components, Redux slices, MUI themes, and basestation connection utilities built on @react-spring/web, @use-gesture, MUI and Redux Toolkit.",
   "license": "MIT",
   "author": "Carson Fujita",
@@ -80,7 +80,7 @@
     "jest-environment-jsdom": "^30.4.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-isometric-engine": "file:C:/Users/thefu/Github/react-isometric-engine",
+    "react-isometric-engine": "^1.1.1",
     "react-redux": "^9.3.0",
     "selenium-webdriver": "^4.46.0",
     "ts-jest": "^29.4.11",

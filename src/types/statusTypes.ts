@@ -210,6 +210,12 @@ type Status = {
     battery: {
         motors: number;
         primary: number;
+        /**
+         * False when the basestation has no reading from the battery sensor, which means
+         * the percentages above aren't real. Absent from simulated telemetry and older
+         * basestations, which is treated the same as true.
+         */
+        sensorConnected?: boolean;
     }
     motors: {
         left: number;

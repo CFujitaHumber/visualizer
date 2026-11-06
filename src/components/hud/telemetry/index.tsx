@@ -7,6 +7,7 @@
  *
  * The components included in this module are:
  * - `Batteries`: Displays the battery levels for the ASV's motors and power system.
+ * - `BatteryFailure`: Shown by `Batteries` when there's no reading from the battery sensor.
  * - `Compass`: Displays the compass heading of the ASV.
  * - `Log`: Displays a log of telemetry events and messages.
  * - `Map`: Displays the ASV's current location and path on a map.
@@ -24,6 +25,7 @@
  * re-exported here.
  */
 import Batteries from "./Batteries";
+import BatteryFailure from "./BatteryFailure";
 import Compass from "./Compass";
 import Log from "./Log";
 import Map from "./Map";
@@ -37,6 +39,7 @@ import TaskData from "./TaskData";
 
 export {
 	Batteries,
+	BatteryFailure,
 	Compass,
 	Log,
 	Map,

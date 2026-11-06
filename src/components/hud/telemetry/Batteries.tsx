@@ -49,6 +49,7 @@ import { useSelector } from "react-redux";
 import type { RootState } from "../../../store";
 import { Box, Typography, useTheme } from "@mui/material";
 import { batteryIconFor } from "../../../utils/batteryUtil";
+import BatteryFailure from "./BatteryFailure";
 
 
 /**
@@ -62,7 +63,8 @@ import { batteryIconFor } from "../../../utils/batteryUtil";
  * - It calculates the average battery level for both the motors and power system.
  * - The battery levels are displayed as percentages with corresponding battery icons that visually represent the charge level.
  * - Color coding is used to indicate the status of the batteries (green for good, yellow for warning, red for critical).
- * 
+ * - Shows {@link BatteryFailure} instead when the basestation has no reading from the battery sensor.
+ *
  * @example
  * ```tsx
  * <Batteries />
@@ -72,8 +74,10 @@ export default function Batteries() {
 	const theme = useTheme();
 	const motorBatteries = useSelector((state: RootState) => state.telemetry.battery.motors);
 	const powerBatteries = useSelector((state: RootState) => state.telemetry.battery.primary);
+	const sensorConnected = useSelector((state: RootState) => state.telemetry.battery.sensorConnected);
 
-	
+	if (sensorConnected === false) return <BatteryFailure />;
+
 	const getBatteryColor = (level: number) => {
 		if (level > 60) return theme.palette.success.main;
 		if (level > 30) return theme.palette.warning.main;
